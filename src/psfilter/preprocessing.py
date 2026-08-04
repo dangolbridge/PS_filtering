@@ -43,7 +43,11 @@ def ensure_transmembrane_file(
     node_indices_path = Path(node_indices_path)
 
     # The requested output already exists.
-    if output_path.is_file() and not overwrite:
+    if (
+    output_path.is_file()
+    and output_path.stat().st_size > 0
+    and not overwrite
+):
         return output_path
 
     if not vm_igb_path.is_file():
