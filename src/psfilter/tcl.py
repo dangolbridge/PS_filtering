@@ -190,7 +190,7 @@ def detect_activation_peaks(
     """Detect activation peaks in one transmembrane-voltage signal.
 
     Activation markers are detected as positive peaks in the numerical
-    derivative, reproducing the method used in the original ``TCL_AP`` code.
+    derivative.
 
     Parameters
     ----------
@@ -200,7 +200,7 @@ def detect_activation_peaks(
         Time represented by one sample.
     derivative_threshold
         Minimum derivative peak height. When ``derivative_per_time=False``,
-        the threshold is expressed per sample, matching the original script.
+        the threshold is expressed per sample.
         When ``True``, it is expressed per unit time.
     min_peak_distance
         Minimum time between detected peaks, in the same time unit as ``dt``.
