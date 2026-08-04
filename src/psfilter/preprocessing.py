@@ -105,3 +105,21 @@ def ensure_transmembrane_file(
         )
 
     return output_path
+
+def mesh_input_exists(mesh_path: PathLike) -> bool:
+    """
+    Check whether a mesh path or mesh basename exists.
+
+    A meshtool mesh argument may be either an existing path or a
+    basename associated with files such as ``.pts`` and ``.elem``.
+    """
+    mesh_path = Path(mesh_path)
+
+    if mesh_path.exists():
+        return True
+
+    points_file = Path(f"{mesh_path}.pts")
+    elements_file = Path(f"{mesh_path}.elem")
+
+    return points_file.is_file() and elements_file.is_file()
+
