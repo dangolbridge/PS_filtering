@@ -321,7 +321,3 @@ def read_transmembrane_file(path: PathLike) -> np.ndarray:
         )
 
     return data
-
-Then replace:
-
-data = np.loadtxt(file_tcl)
