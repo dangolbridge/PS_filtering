@@ -62,21 +62,26 @@ def igbhead_run(
 
     execute_command(command)
 
+
 def run_igbfilament(
     igbfilament_executable: PathLike,
     input_igb: PathLike,
     input_mesh: PathLike,
-    dt_val: Sequence[int]=8,
-    threshold_val: Sequence[int]=-50,    
     output_path: PathLike,
+    dt_val: float = 8.0,
+    threshold_val: float = -50.0,
 ) -> None:
-    """Run igbfilament over a mesh and igbfile made from it"""
-    
-    command = [igbfilament_executable,
-           '-t', threshold_val,
-           '-d', dt_val,
-           '-a', output_path,
-           input_mesh,
-           input_igb]
-    execute_command(command)
+    """Run igbfilament on an IGB file and its associated mesh."""
+    command = [
+        igbfilament_executable,
+        "-t",
+        threshold_val,
+        "-d",
+        dt_val,
+        "-a",
+        output_path,
+        input_mesh,
+        input_igb,
+    ]
 
+    execute_command(command)
