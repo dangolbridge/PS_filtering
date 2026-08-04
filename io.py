@@ -273,3 +273,55 @@ def required_outputs_exist(
         (output_directory / filename).is_file()
         for filename in filenames
     )
+
+
+def read_transmembrane_file(path: PathLike) -> np.ndarray:
+    """
+    Read an extracted transmembrane-voltage text file.
+
+    The returned array has shape:
+
+        (number_of_time_samples, number_of_signals)
+
+    Parameters
+    ----------
+    path
+        Path to the extracted transmembrane-voltage file, normally
+        ``transmembrane_v.dat``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Transmembrane-voltage signals as a two-dimensional array.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the input file does not exist.
+    ValueError
+        If the file is empty or cannot be interpreted as numerical data.
+    """
+    path = Path(path)
+
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Transmembrane-voltage file not found: {path}"
+        )
+
+    try:
+        data = np.loadtxt(path, dtype=float, ndmin=2)
+    except ValueError as error:
+        raise ValueError(
+            f"Could not read numerical data from {path}."
+        ) from error
+
+    if data.size == 0:
+        raise ValueError(
+            f"Transmembrane-voltage file is empty: {path}"
+        )
+
+    return data
+
+Then replace:
+
+data = np.loadtxt(file_tcl)
