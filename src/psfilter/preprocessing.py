@@ -55,10 +55,10 @@ def ensure_transmembrane_file(
             f"Input IGB file not found: {vm_igb_path}"
         )
 
-    if not mesh_path.exists():
+    if not mesh_input_exists(mesh_path):
         raise FileNotFoundError(
-            f"Mesh not found: {mesh_path}"
-        )
+        f"Mesh or mesh basename not found: {mesh_path}"
+    )
 
     if not node_indices_path.is_file():
         if not transformed_points_path.is_file():
