@@ -1,4 +1,4 @@
-"""Input and output utilities for phase-singularity analysis."""
+"""Input and output utilities for phase-singularity and tcl analysis."""
 
 from __future__ import annotations
 
