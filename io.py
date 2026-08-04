@@ -321,3 +321,68 @@ def read_transmembrane_file(path: PathLike) -> np.ndarray:
         )
 
     return data
+
+def write_tcl_query_points(
+    mesh_points_path: PathLike,
+    output_path: PathLike,
+    search_radius: float = 50.0,
+) -> None:
+    """
+    Create a meshtool coordinate-query file from a ``.pts`` file.
+
+    Each output row contains:
+
+        x y z search_radius
+    """
+    mesh_points_path = Path(mesh_points_path)
+    output_path = Path(output_path)
+
+    coordinates = read_pts_file(mesh_points_path)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", encoding="utf-8") as file:
+        file.write(f"{coordinates.shape[0]}\n")
+
+        for x, y, z in coordinates:
+            file.write(
+                f"{x:.12g} {y:.12g} {z:.12g} "
+                f"{search_radius:.12g}\n"
+            )
+
+def read_index_list(path: PathLike) -> np.ndarray:
+    """
+    Read a meshtool index-list output file.
+
+    The first line is expected to contain the number of indices.
+    """
+    path = Path(path)
+
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Node-index file not found: {path}"
+        )
+
+    with path.open("r", encoding="utf-8") as file:
+        header = file.readline().strip()
+
+        try:
+            expected_count = int(header)
+        except ValueError as error:
+            raise ValueError(
+                f"The first line of {path} must contain "
+                "the number of node indices."
+            ) from error
+
+        indices = np.loadtxt(file, dtype=int, ndmin=1)
+
+    indices = np.asarray(indices, dtype=int).reshape(-1)
+
+    if len(indices) != expected_count:
+        raise ValueError(
+            f"Expected {expected_count} node indices in {path}, "
+            f"but found {len(indices)}."
+        )
+
+    return indices
+
