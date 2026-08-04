@@ -46,7 +46,7 @@ def run_igbextract(
 
     execute_command(command)
 
-def igbhead_run(
+def run_igbhead()(
     igbhead_executable: PathLike,
     input_igb: PathLike,
     output_path: PathLike,
