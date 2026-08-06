@@ -7,12 +7,12 @@ The CLI exposes the existing numerical modules through five subcommands:
 ``ps-detect``
     Create a phase-singularity ``.pts_t`` file with igbhead/igbfilament.
 ``ps-coords``
-    Run coordinate-based PS continuity and filtering using either backend.
+    Run geodesic coordinate-based PS continuity and filtering.
 ``rotor-track``
-    Run globally assigned rotor tracking using either backend.
+    Run geodesic globally assigned rotor tracking.
 ``all``
-    Execute the complete workflow while reusing mesh coordinates and mapped
-    PS timesteps, and build one geodesic graph only when requested.
+    Execute the complete workflow while reusing mesh coordinates, mapped PS
+    timesteps, and one geodesic graph between the two PS analyses.
 """
 
 from __future__ import annotations
@@ -38,31 +38,16 @@ from .mapping import PSMappingResult, map_ps_coordinates_to_vertices
 from .mesh_geodesic import MeshGeodesicGraph
 from .phase_singularity import ensure_phase_singularity_file
 from .preprocessing import ensure_transmembrane_file
-from .ps_coordinates import (
-    PSCoordinateResult as EuclideanPSCoordinateResult,
-    analyze_ps_coordinates as analyze_ps_coordinates_euclidean,
-)
 from .ps_coordinates_geodesic import (
-    PSCoordinateResult as GeodesicPSCoordinateResult,
-    analyze_ps_coordinates as analyze_ps_coordinates_geodesic,
-)
-from .rotor_tracking import (
-    RotorTrackingResult as EuclideanRotorTrackingResult,
-    analyze_rotor_tracking as analyze_rotor_tracking_euclidean,
+    PSCoordinateResult,
+    analyze_ps_coordinates,
 )
 from .rotor_tracking_geodesic import (
-    RotorTrackingResult as GeodesicRotorTrackingResult,
-    analyze_rotor_tracking as analyze_rotor_tracking_geodesic,
+    RotorTrackingResult,
+    analyze_rotor_tracking,
 )
 from .tcl import TCLResult, calculate_tcl
 
-
-
-PSCoordinateResultType = EuclideanPSCoordinateResult | GeodesicPSCoordinateResult
-RotorTrackingResultType = (
-    EuclideanRotorTrackingResult | GeodesicRotorTrackingResult
-)
-DISTANCE_MODES = ("geodesic", "euclidean")
 
 TCL_OUTPUTS = [
     "tcl_peaks_AP.csv",
@@ -444,50 +429,12 @@ def _build_geodesic_graph(
     return graph
 
 
-def _graph_summary_fields(
-    graph: MeshGeodesicGraph | None,
-) -> dict[str, int | float | None]:
-    """Return stable graph-summary fields for either distance backend."""
-    if graph is None:
-        return {
-            "n_mesh_edges": None,
-            "n_mesh_elements": None,
-            "graph_build_seconds": None,
-            "graph_compact_memory_bytes": None,
-            "geodesic_cache_size_limit": None,
-            "geodesic_cache_entries": None,
-            "geodesic_distance_requests": None,
-            "geodesic_dijkstra_runs": None,
-            "geodesic_cache_hits": None,
-            "geodesic_cache_misses": None,
-            "geodesic_visited_vertices": None,
-            "geodesic_relaxed_edges": None,
-        }
-
-    stats = graph.statistics()
-    return {
-        "n_mesh_edges": stats["n_undirected_edges"],
-        "n_mesh_elements": stats["element_count"],
-        "graph_build_seconds": stats["graph_build_seconds"],
-        "graph_compact_memory_bytes": stats["compact_memory_bytes"],
-        "geodesic_cache_size_limit": stats["cache_size_limit"],
-        "geodesic_cache_entries": stats["cache_entries"],
-        "geodesic_distance_requests": stats["distance_requests"],
-        "geodesic_dijkstra_runs": stats["dijkstra_runs"],
-        "geodesic_cache_hits": stats["cache_hits"],
-        "geodesic_cache_misses": stats["cache_misses"],
-        "geodesic_visited_vertices": stats["visited_vertices"],
-        "geodesic_relaxed_edges": stats["relaxed_edges"],
-    }
-
-
 def _write_ps_coordinate_outputs(
-    result: PSCoordinateResultType,
+    result: PSCoordinateResult,
     mapping: PSMappingResult,
-    graph: MeshGeodesicGraph | None,
+    graph: MeshGeodesicGraph,
     output_dir: Path,
     *,
-    distance_mode: str,
     mesh_vertex_count: int,
     radius: float,
     history_steps: int,
@@ -513,44 +460,53 @@ def _write_ps_coordinate_outputs(
     write_dataframe(output_dir / "rotor_lifetimes.csv", result.lifetime_report)
     write_dataframe(output_dir / "ps_mapping_report.csv", mapping.report)
 
-    summary_row = {
-        "distance_method": (
-            "bounded_mesh_geodesic"
-            if distance_mode == "geodesic"
-            else "euclidean"
-        ),
-        "n_mesh_vertices": mesh_vertex_count,
-        "n_ps_timesteps": len(mapping.timesteps),
-        "n_input_ps_points": mapping.n_input_points,
-        "n_mapped_ps_points": mapping.n_mapped_points,
-        "n_dropped_ps_points": mapping.n_dropped_points,
-        "maximum_mapping_distance": mapping.maximum_distance,
-        "reference_tcl": result.reference_tcl,
-        "ps_timestep_dt": result.timestep_dt,
-        "n_cycles": len(result.cycle_counts),
-        "n_vertices_with_raw_hits": int((result.total_counts > 0).sum()),
-        "n_accepted_vertices": int(result.accepted_mask.sum()),
-        "radius": radius,
-        "history_steps": history_steps,
-        "min_segment_time": min_segment_time,
-        "gap_factor": gap_factor,
-        "hard_cap_fraction": hard_cap_fraction,
-        "simulation_duration": result.simulation_duration,
-        "maximum_allowed_segment_time": result.maximum_allowed_segment_time,
-        "reject_single_segment": reject_single_segment,
-    }
-    summary_row.update(_graph_summary_fields(graph))
-    write_dataframe(
-        output_dir / "ps_coords_summary.csv",
-        pd.DataFrame([summary_row]),
+    stats = graph.statistics()
+    summary = pd.DataFrame(
+        [
+            {
+                "distance_method": "bounded_mesh_geodesic",
+                "n_mesh_vertices": mesh_vertex_count,
+                "n_mesh_edges": stats["n_undirected_edges"],
+                "n_mesh_elements": stats["element_count"],
+                "graph_build_seconds": stats["graph_build_seconds"],
+                "graph_compact_memory_bytes": stats["compact_memory_bytes"],
+                "geodesic_cache_size_limit": stats["cache_size_limit"],
+                "geodesic_cache_entries": stats["cache_entries"],
+                "geodesic_distance_requests": stats["distance_requests"],
+                "geodesic_dijkstra_runs": stats["dijkstra_runs"],
+                "geodesic_cache_hits": stats["cache_hits"],
+                "geodesic_cache_misses": stats["cache_misses"],
+                "geodesic_visited_vertices": stats["visited_vertices"],
+                "geodesic_relaxed_edges": stats["relaxed_edges"],
+                "n_ps_timesteps": len(mapping.timesteps),
+                "n_input_ps_points": mapping.n_input_points,
+                "n_mapped_ps_points": mapping.n_mapped_points,
+                "n_dropped_ps_points": mapping.n_dropped_points,
+                "maximum_mapping_distance": mapping.maximum_distance,
+                "reference_tcl": result.reference_tcl,
+                "ps_timestep_dt": result.timestep_dt,
+                "n_cycles": len(result.cycle_counts),
+                "n_vertices_with_raw_hits": int((result.total_counts > 0).sum()),
+                "n_accepted_vertices": int(result.accepted_mask.sum()),
+                "radius": radius,
+                "history_steps": history_steps,
+                "min_segment_time": min_segment_time,
+                "gap_factor": gap_factor,
+                "hard_cap_fraction": hard_cap_fraction,
+                "simulation_duration": result.simulation_duration,
+                "maximum_allowed_segment_time": result.maximum_allowed_segment_time,
+                "reject_single_segment": reject_single_segment,
+            }
+        ]
     )
+    write_dataframe(output_dir / "ps_coords_summary.csv", summary)
+
 
 def _run_ps_coordinates_stage(
     *,
     mesh_coordinates,
     mapping: PSMappingResult,
-    graph: MeshGeodesicGraph | None,
-    distance_mode: str,
+    graph: MeshGeodesicGraph,
     reference_tcl: float,
     output_dir: Path,
     radius: float,
@@ -560,43 +516,28 @@ def _run_ps_coordinates_stage(
     hard_cap_fraction: float,
     reject_single_segment: bool,
     overwrite: bool,
-) -> tuple[str, PSCoordinateResultType | None]:
+) -> tuple[str, PSCoordinateResult | None]:
     if _outputs_ready(output_dir, PS_COORD_OUTPUTS) and not overwrite:
-        print(f"[ps-coords:{distance_mode}] Reusing outputs in {output_dir}")
+        print(f"[ps-coords] Reusing outputs in {output_dir}")
         return "reused", None
 
-    common_arguments = {
-        "mapped_timesteps": mapping.timesteps,
-        "mesh_coordinates": mesh_coordinates,
-        "reference_tcl": reference_tcl,
-        "radius": radius,
-        "history_steps": history_steps,
-        "min_segment_time": min_segment_time,
-        "gap_factor": gap_factor,
-        "hard_cap_fraction": hard_cap_fraction,
-        "reject_single_segment": reject_single_segment,
-    }
-
-    if distance_mode == "geodesic":
-        if graph is None:
-            raise RuntimeError(
-                "A geodesic graph is required for geodesic PS_coords."
-            )
-        result = analyze_ps_coordinates_geodesic(
-            geodesic_graph=graph,
-            **common_arguments,
-        )
-    elif distance_mode == "euclidean":
-        result = analyze_ps_coordinates_euclidean(**common_arguments)
-    else:
-        raise ValueError(f"Unsupported distance mode: {distance_mode}")
-
+    result = analyze_ps_coordinates(
+        mapped_timesteps=mapping.timesteps,
+        mesh_coordinates=mesh_coordinates,
+        geodesic_graph=graph,
+        reference_tcl=reference_tcl,
+        radius=radius,
+        history_steps=history_steps,
+        min_segment_time=min_segment_time,
+        gap_factor=gap_factor,
+        hard_cap_fraction=hard_cap_fraction,
+        reject_single_segment=reject_single_segment,
+    )
     _write_ps_coordinate_outputs(
         result,
         mapping,
         graph,
         output_dir,
-        distance_mode=distance_mode,
         mesh_vertex_count=mesh_coordinates.shape[0],
         radius=radius,
         history_steps=history_steps,
@@ -605,19 +546,16 @@ def _run_ps_coordinates_stage(
         hard_cap_fraction=hard_cap_fraction,
         reject_single_segment=reject_single_segment,
     )
-    print(
-        f"[ps-coords:{distance_mode}] Accepted vertices: "
-        f"{int(result.accepted_mask.sum())}"
-    )
+    print(f"[ps-coords] Accepted vertices: {int(result.accepted_mask.sum())}")
     return "created", result
 
+
 def _write_rotor_outputs(
-    result: RotorTrackingResultType,
+    result: RotorTrackingResult,
     mapping: PSMappingResult,
-    graph: MeshGeodesicGraph | None,
+    graph: MeshGeodesicGraph,
     output_dir: Path,
     *,
-    distance_mode: str,
     mesh_vertex_count: int,
     count_every_hit: bool,
 ) -> None:
@@ -657,56 +595,65 @@ def _write_rotor_outputs(
     write_dataframe(output_dir / "rotor_track_points.csv", result.track_points)
     write_dataframe(output_dir / "rotor_track_mapping_report.csv", mapping.report)
 
-    summary_row = {
-        "matching_method": "global_linear_assignment",
-        "distance_method": (
-            "bounded_mesh_geodesic"
-            if distance_mode == "geodesic"
-            else "euclidean"
-        ),
-        "n_mesh_vertices": mesh_vertex_count,
-        "n_ps_timesteps": len(mapping.timesteps),
-        "n_input_ps_points": mapping.n_input_points,
-        "n_mapped_ps_points": mapping.n_mapped_points,
-        "n_dropped_ps_points": mapping.n_dropped_points,
-        "maximum_mapping_distance": mapping.maximum_distance,
-        "reference_tcl": result.reference_tcl,
-        "ps_timestep_dt": result.timestep_dt,
-        "n_cycles": len(result.cycle_intervals),
-        "nominal_simulation_duration": result.nominal_simulation_duration,
-        "maximum_allowed_segment_time": result.maximum_allowed_segment_time,
-        "n_all_tracks": len(result.all_tracks),
-        "n_accepted_tracks": len(result.accepted_tracks),
-        "n_rejected_tracks": len(result.rejected_tracks),
-        "n_valid_segments": len(result.valid_segments),
-        "n_invalid_segments": len(result.invalid_segments),
-        "n_rolling_drift_splits": len(result.drift_split_report),
-        "n_vertices_with_track_counts": int((result.full_counts > 0).sum()),
-        "n_vertices_with_hit_counts": int((result.hit_counts > 0).sum()),
-        "match_radius": result.match_radius,
-        "max_gap_steps": result.max_gap_steps,
-        "gap_factor": result.gap_factor,
-        "min_segment_time": result.min_segment_time,
-        "drift_window_time": result.drift_window_time,
-        "drift_radius_factor": result.drift_radius_factor,
-        "maximum_rolling_drift_distance": (
-            result.drift_radius_factor * result.match_radius
-        ),
-        "hard_cap_fraction": result.max_single_segment_fraction,
-        "unique_per_track": not count_every_hit,
-    }
-    summary_row.update(_graph_summary_fields(graph))
-    write_dataframe(
-        output_dir / "rotor_tracking_run_summary.csv",
-        pd.DataFrame([summary_row]),
+    stats = graph.statistics()
+    summary = pd.DataFrame(
+        [
+            {
+                "matching_method": "global_linear_assignment",
+                "distance_method": "bounded_mesh_geodesic",
+                "n_mesh_vertices": mesh_vertex_count,
+                "n_mesh_edges": stats["n_undirected_edges"],
+                "n_mesh_elements": stats["element_count"],
+                "graph_build_seconds": stats["graph_build_seconds"],
+                "graph_compact_memory_bytes": stats["compact_memory_bytes"],
+                "geodesic_cache_size_limit": stats["cache_size_limit"],
+                "geodesic_cache_entries": stats["cache_entries"],
+                "geodesic_distance_requests": stats["distance_requests"],
+                "geodesic_dijkstra_runs": stats["dijkstra_runs"],
+                "geodesic_cache_hits": stats["cache_hits"],
+                "geodesic_cache_misses": stats["cache_misses"],
+                "geodesic_visited_vertices": stats["visited_vertices"],
+                "geodesic_relaxed_edges": stats["relaxed_edges"],
+                "n_ps_timesteps": len(mapping.timesteps),
+                "n_input_ps_points": mapping.n_input_points,
+                "n_mapped_ps_points": mapping.n_mapped_points,
+                "n_dropped_ps_points": mapping.n_dropped_points,
+                "maximum_mapping_distance": mapping.maximum_distance,
+                "reference_tcl": result.reference_tcl,
+                "ps_timestep_dt": result.timestep_dt,
+                "n_cycles": len(result.cycle_intervals),
+                "nominal_simulation_duration": result.nominal_simulation_duration,
+                "maximum_allowed_segment_time": result.maximum_allowed_segment_time,
+                "n_all_tracks": len(result.all_tracks),
+                "n_accepted_tracks": len(result.accepted_tracks),
+                "n_rejected_tracks": len(result.rejected_tracks),
+                "n_valid_segments": len(result.valid_segments),
+                "n_invalid_segments": len(result.invalid_segments),
+                "n_rolling_drift_splits": len(result.drift_split_report),
+                "n_vertices_with_track_counts": int((result.full_counts > 0).sum()),
+                "n_vertices_with_hit_counts": int((result.hit_counts > 0).sum()),
+                "match_radius": result.match_radius,
+                "max_gap_steps": result.max_gap_steps,
+                "gap_factor": result.gap_factor,
+                "min_segment_time": result.min_segment_time,
+                "drift_window_time": result.drift_window_time,
+                "drift_radius_factor": result.drift_radius_factor,
+                "maximum_rolling_drift_distance": (
+                    result.drift_radius_factor * result.match_radius
+                ),
+                "hard_cap_fraction": result.max_single_segment_fraction,
+                "unique_per_track": not count_every_hit,
+            }
+        ]
     )
+    write_dataframe(output_dir / "rotor_tracking_run_summary.csv", summary)
+
 
 def _run_rotor_stage(
     *,
     mesh_coordinates,
     mapping: PSMappingResult,
-    graph: MeshGeodesicGraph | None,
-    distance_mode: str,
+    graph: MeshGeodesicGraph,
     reference_tcl: float,
     output_dir: Path,
     match_radius: float,
@@ -718,54 +665,39 @@ def _run_rotor_stage(
     hard_cap_fraction: float | None,
     count_every_hit: bool,
     overwrite: bool,
-) -> tuple[str, RotorTrackingResultType | None]:
+) -> tuple[str, RotorTrackingResult | None]:
     if _outputs_ready(output_dir, ROTOR_TRACK_OUTPUTS) and not overwrite:
-        print(f"[rotor-track:{distance_mode}] Reusing outputs in {output_dir}")
+        print(f"[rotor-track] Reusing outputs in {output_dir}")
         return "reused", None
 
-    common_arguments = {
-        "mapped_timesteps": mapping.timesteps,
-        "mesh_coordinates": mesh_coordinates,
-        "reference_tcl": reference_tcl,
-        "match_radius": match_radius,
-        "max_gap_steps": max_gap_steps,
-        "min_segment_time": min_segment_time,
-        "gap_factor": gap_factor,
-        "drift_window_time": drift_window_time,
-        "drift_radius_factor": drift_radius_factor,
-        "max_single_segment_fraction": hard_cap_fraction,
-        "unique_per_track": not count_every_hit,
-    }
-
-    if distance_mode == "geodesic":
-        if graph is None:
-            raise RuntimeError(
-                "A geodesic graph is required for geodesic rotor tracking."
-            )
-        result = analyze_rotor_tracking_geodesic(
-            geodesic_graph=graph,
-            **common_arguments,
-        )
-    elif distance_mode == "euclidean":
-        result = analyze_rotor_tracking_euclidean(**common_arguments)
-    else:
-        raise ValueError(f"Unsupported distance mode: {distance_mode}")
-
+    result = analyze_rotor_tracking(
+        mapped_timesteps=mapping.timesteps,
+        mesh_coordinates=mesh_coordinates,
+        geodesic_graph=graph,
+        reference_tcl=reference_tcl,
+        match_radius=match_radius,
+        max_gap_steps=max_gap_steps,
+        min_segment_time=min_segment_time,
+        gap_factor=gap_factor,
+        drift_window_time=drift_window_time,
+        drift_radius_factor=drift_radius_factor,
+        max_single_segment_fraction=hard_cap_fraction,
+        unique_per_track=not count_every_hit,
+    )
     _write_rotor_outputs(
         result,
         mapping,
         graph,
         output_dir,
-        distance_mode=distance_mode,
         mesh_vertex_count=mesh_coordinates.shape[0],
         count_every_hit=count_every_hit,
     )
     print(
-        f"[rotor-track:{distance_mode}] "
-        f"Accepted tracks: {len(result.accepted_tracks)}; "
+        f"[rotor-track] Accepted tracks: {len(result.accepted_tracks)}; "
         f"valid segments: {len(result.valid_segments)}"
     )
     return "created", result
+
 
 def _add_tcl_arguments(parser: argparse.ArgumentParser, *, include_paths: bool = True) -> None:
     if include_paths:
@@ -801,17 +733,6 @@ def _add_graph_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--edge-chunk-size", type=int, default=500000)
 
 
-def _add_distance_mode_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--distance-mode",
-        choices=DISTANCE_MODES,
-        default="geodesic",
-        help=(
-            "Distance backend used by the analysis. Default: geodesic."
-        ),
-    )
-
-
 def _add_mapping_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-mapping-distance", type=float, default=None)
 
@@ -845,7 +766,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     coords_parser = subparsers.add_parser(
         "ps-coords",
-        help="Run coordinate-based PS filtering.",
+        help="Run geodesic coordinate-based PS filtering.",
     )
     coords_parser.add_argument("--mesh-points", type=Path, required=True)
     coords_parser.add_argument("--mesh-elements", type=Path, default=None)
@@ -860,13 +781,12 @@ def _build_parser() -> argparse.ArgumentParser:
     coords_parser.add_argument("--allow-single-segment", action="store_true")
     coords_parser.add_argument("--overwrite", action="store_true")
     _add_mapping_argument(coords_parser)
-    _add_distance_mode_argument(coords_parser)
     _add_graph_arguments(coords_parser)
     coords_parser.set_defaults(handler=_command_ps_coords)
 
     rotor_parser = subparsers.add_parser(
         "rotor-track",
-        help="Run globally assigned rotor tracking.",
+        help="Run geodesic globally assigned rotor tracking.",
     )
     rotor_parser.add_argument("--mesh-points", type=Path, required=True)
     rotor_parser.add_argument("--mesh-elements", type=Path, default=None)
@@ -889,13 +809,12 @@ def _build_parser() -> argparse.ArgumentParser:
     rotor_parser.add_argument("--count-every-hit", action="store_true")
     rotor_parser.add_argument("--overwrite", action="store_true")
     _add_mapping_argument(rotor_parser)
-    _add_distance_mode_argument(rotor_parser)
     _add_graph_arguments(rotor_parser)
     rotor_parser.set_defaults(handler=_command_rotor_track)
 
     all_parser = subparsers.add_parser(
         "all",
-        help="Run the complete analysis workflow.",
+        help="Run the complete geodesic analysis workflow.",
     )
     all_parser.add_argument("--work-dir", type=Path, default=Path("."))
     all_parser.add_argument(
@@ -945,21 +864,6 @@ def _build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--ps-hard-cap-fraction", type=float, default=0.90)
     all_parser.add_argument("--allow-single-segment", action="store_true")
     all_parser.add_argument("--skip-ps-coords", action="store_true")
-    all_parser.add_argument(
-        "--ps-distance-mode",
-        choices=DISTANCE_MODES,
-        default="geodesic",
-        help="Distance backend for PS_coords. Default: geodesic.",
-    )
-    all_parser.add_argument(
-        "--ps-coords-output-dir",
-        type=Path,
-        default=None,
-        help=(
-            "Output directory for PS_coords. By default, a mode-specific "
-            "subdirectory is created under --ps-output-dir."
-        ),
-    )
 
     all_parser.add_argument("--track-radius", type=float, default=2000.0)
     all_parser.add_argument("--max-gap-steps", type=int, default=5)
@@ -970,21 +874,6 @@ def _build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--track-hard-cap-fraction", type=float, default=0.90)
     all_parser.add_argument("--count-every-hit", action="store_true")
     all_parser.add_argument("--skip-rotor-track", action="store_true")
-    all_parser.add_argument(
-        "--track-distance-mode",
-        choices=DISTANCE_MODES,
-        default="geodesic",
-        help="Distance backend for rotor tracking. Default: geodesic.",
-    )
-    all_parser.add_argument(
-        "--rotor-output-dir",
-        type=Path,
-        default=None,
-        help=(
-            "Output directory for rotor tracking. By default, a mode-specific "
-            "subdirectory is created under --ps-output-dir."
-        ),
-    )
 
     all_parser.add_argument("--max-mapping-distance", type=float, default=None)
     _add_graph_arguments(all_parser)
@@ -1048,21 +937,16 @@ def _load_ps_inputs(
     max_mapping_distance: float | None,
     geodesic_cache_size: int,
     edge_chunk_size: int,
-    need_geodesic: bool,
 ):
     mesh_coordinates = read_pts_file(mesh_points)
-
-    graph = None
-    if need_geodesic:
-        if mesh_elements is None:
-            mesh_elements = mesh_points.with_suffix(".elem")
-        graph = _build_geodesic_graph(
-            mesh_coordinates,
-            mesh_elements,
-            cache_size=geodesic_cache_size,
-            edge_chunk_size=edge_chunk_size,
-        )
-
+    if mesh_elements is None:
+        mesh_elements = mesh_points.with_suffix(".elem")
+    graph = _build_geodesic_graph(
+        mesh_coordinates,
+        mesh_elements,
+        cache_size=geodesic_cache_size,
+        edge_chunk_size=edge_chunk_size,
+    )
     ps_timesteps = read_pts_t_file(points_time)
     mapping = map_ps_coordinates_to_vertices(
         ps_timesteps=ps_timesteps,
@@ -1071,6 +955,7 @@ def _load_ps_inputs(
     )
     reference_tcl = read_mean_tcl(tcl_summary)
     return mesh_coordinates, graph, mapping, reference_tcl
+
 
 def _command_ps_coords(args: argparse.Namespace) -> int:
     mesh, graph, mapping, reference_tcl = _load_ps_inputs(
@@ -1081,13 +966,11 @@ def _command_ps_coords(args: argparse.Namespace) -> int:
         max_mapping_distance=args.max_mapping_distance,
         geodesic_cache_size=args.geodesic_cache_size,
         edge_chunk_size=args.edge_chunk_size,
-        need_geodesic=args.distance_mode == "geodesic",
     )
     _run_ps_coordinates_stage(
         mesh_coordinates=mesh,
         mapping=mapping,
         graph=graph,
-        distance_mode=args.distance_mode,
         reference_tcl=reference_tcl,
         output_dir=args.output_dir,
         radius=args.radius,
@@ -1100,6 +983,7 @@ def _command_ps_coords(args: argparse.Namespace) -> int:
     )
     return 0
 
+
 def _command_rotor_track(args: argparse.Namespace) -> int:
     mesh, graph, mapping, reference_tcl = _load_ps_inputs(
         mesh_points=args.mesh_points,
@@ -1109,14 +993,12 @@ def _command_rotor_track(args: argparse.Namespace) -> int:
         max_mapping_distance=args.max_mapping_distance,
         geodesic_cache_size=args.geodesic_cache_size,
         edge_chunk_size=args.edge_chunk_size,
-        need_geodesic=args.distance_mode == "geodesic",
     )
     hard_cap = None if args.hard_cap_fraction < 0 else args.hard_cap_fraction
     _run_rotor_stage(
         mesh_coordinates=mesh,
         mapping=mapping,
         graph=graph,
-        distance_mode=args.distance_mode,
         reference_tcl=reference_tcl,
         output_dir=args.output_dir,
         match_radius=args.radius,
@@ -1131,28 +1013,11 @@ def _command_rotor_track(args: argparse.Namespace) -> int:
     )
     return 0
 
+
 def _command_all(args: argparse.Namespace) -> int:
     paths = _resolve_pipeline_paths(args)
     paths.tcl_output_dir.mkdir(parents=True, exist_ok=True)
     paths.ps_output_dir.mkdir(parents=True, exist_ok=True)
-
-    ps_coords_output_dir = _resolve_relative(
-        args.ps_coords_output_dir,
-        paths.work_dir,
-    )
-    if ps_coords_output_dir is None:
-        ps_coords_output_dir = (
-            paths.ps_output_dir / f"ps_coords_{args.ps_distance_mode}"
-        )
-
-    rotor_output_dir = _resolve_relative(
-        args.rotor_output_dir,
-        paths.work_dir,
-    )
-    if rotor_output_dir is None:
-        rotor_output_dir = (
-            paths.ps_output_dir / f"rotor_track_{args.track_distance_mode}"
-        )
 
     stage_rows: list[dict[str, str]] = []
 
@@ -1213,42 +1078,25 @@ def _command_all(args: argparse.Namespace) -> int:
     stage_rows.append({"stage": "ps-detect", "status": detection_status})
 
     need_ps_coords = not args.skip_ps_coords and (
-        args.overwrite or not _outputs_ready(
-            ps_coords_output_dir,
-            PS_COORD_OUTPUTS,
-        )
+        args.overwrite or not _outputs_ready(paths.ps_output_dir, PS_COORD_OUTPUTS)
     )
     need_rotor = not args.skip_rotor_track and (
-        args.overwrite or not _outputs_ready(
-            rotor_output_dir,
-            ROTOR_TRACK_OUTPUTS,
-        )
+        args.overwrite or not _outputs_ready(paths.ps_output_dir, ROTOR_TRACK_OUTPUTS)
     )
 
     if need_ps_coords or need_rotor:
         mesh_coordinates = read_pts_file(paths.mesh_points)
+        graph = _build_geodesic_graph(
+            mesh_coordinates,
+            paths.mesh_elements,
+            cache_size=args.geodesic_cache_size,
+            edge_chunk_size=args.edge_chunk_size,
+        )
         ps_timesteps = read_pts_t_file(paths.points_time)
         mapping = map_ps_coordinates_to_vertices(
             ps_timesteps=ps_timesteps,
             mesh_coordinates=mesh_coordinates,
             max_distance=args.max_mapping_distance,
-        )
-
-        need_geodesic_graph = (
-            need_ps_coords and args.ps_distance_mode == "geodesic"
-        ) or (
-            need_rotor and args.track_distance_mode == "geodesic"
-        )
-
-        graph = (
-            _build_geodesic_graph(
-                mesh_coordinates,
-                paths.mesh_elements,
-                cache_size=args.geodesic_cache_size,
-                edge_chunk_size=args.edge_chunk_size,
-            )
-            if need_geodesic_graph
-            else None
         )
     else:
         mesh_coordinates = None
@@ -1258,14 +1106,13 @@ def _command_all(args: argparse.Namespace) -> int:
     if args.skip_ps_coords:
         ps_coords_status = "skipped"
     elif need_ps_coords:
-        assert mesh_coordinates is not None and mapping is not None
+        assert mesh_coordinates is not None and graph is not None and mapping is not None
         ps_coords_status, _ = _run_ps_coordinates_stage(
             mesh_coordinates=mesh_coordinates,
             mapping=mapping,
             graph=graph,
-            distance_mode=args.ps_distance_mode,
             reference_tcl=reference_tcl,
-            output_dir=ps_coords_output_dir,
+            output_dir=paths.ps_output_dir,
             radius=args.ps_radius,
             history_steps=args.history_steps,
             min_segment_time=args.ps_min_segment_time,
@@ -1276,17 +1123,12 @@ def _command_all(args: argparse.Namespace) -> int:
         )
     else:
         ps_coords_status = "reused"
-    stage_rows.append(
-        {
-            "stage": f"ps-coords-{args.ps_distance_mode}",
-            "status": ps_coords_status,
-        }
-    )
+    stage_rows.append({"stage": "ps-coords", "status": ps_coords_status})
 
     if args.skip_rotor_track:
         rotor_status = "skipped"
     elif need_rotor:
-        assert mesh_coordinates is not None and mapping is not None
+        assert mesh_coordinates is not None and graph is not None and mapping is not None
         track_cap = (
             None
             if args.track_hard_cap_fraction < 0
@@ -1296,9 +1138,8 @@ def _command_all(args: argparse.Namespace) -> int:
             mesh_coordinates=mesh_coordinates,
             mapping=mapping,
             graph=graph,
-            distance_mode=args.track_distance_mode,
             reference_tcl=reference_tcl,
-            output_dir=rotor_output_dir,
+            output_dir=paths.ps_output_dir,
             match_radius=args.track_radius,
             max_gap_steps=args.max_gap_steps,
             min_segment_time=args.track_min_segment_time,
@@ -1311,12 +1152,7 @@ def _command_all(args: argparse.Namespace) -> int:
         )
     else:
         rotor_status = "reused"
-    stage_rows.append(
-        {
-            "stage": f"rotor-track-{args.track_distance_mode}",
-            "status": rotor_status,
-        }
-    )
+    stage_rows.append({"stage": "rotor-track", "status": rotor_status})
 
     pipeline_summary = pd.DataFrame(stage_rows)
     pipeline_summary["work_dir"] = str(paths.work_dir)
@@ -1324,14 +1160,13 @@ def _command_all(args: argparse.Namespace) -> int:
     pipeline_summary["points_time"] = str(paths.points_time)
     pipeline_summary["tcl_output_dir"] = str(paths.tcl_output_dir)
     pipeline_summary["ps_output_dir"] = str(paths.ps_output_dir)
-    pipeline_summary["ps_coords_output_dir"] = str(ps_coords_output_dir)
-    pipeline_summary["rotor_output_dir"] = str(rotor_output_dir)
     write_dataframe(paths.work_dir / "psfilter_pipeline_summary.csv", pipeline_summary)
 
     print("\nPipeline complete:")
     for row in stage_rows:
         print(f"  {row['stage']}: {row['status']}")
     return 0
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the psfilter command-line interface."""
