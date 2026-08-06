@@ -266,14 +266,16 @@ def required_outputs_exist(
     output_directory: PathLike,
     filenames: Sequence[str],
 ) -> bool:
-    """Return True when all required output files exist."""
     output_directory = Path(output_directory)
 
-    return all(
-        (output_directory / filename).is_file()
-        for filename in filenames
-    )
+    for filename in filenames:
+        path = output_directory / filename
 
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+
+    return True
+    
 
 def read_transmembrane_file(path: PathLike) -> np.ndarray:
     """
