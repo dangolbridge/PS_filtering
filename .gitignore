@@ -1,0 +1,27 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Package and test caches
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Build outputs
+build/
+dist/
+
+# Generated simulation outputs
+*.igb
+clean.igb
+PS_results/
+tcl_results/
+
+# Editors and operating system
+.vscode/
+.idea/
+.DS_Store
