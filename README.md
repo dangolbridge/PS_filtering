@@ -110,7 +110,7 @@ comparison, but the published CLI uses the geodesic analysis modules.
 Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/dangolbridge/PS_filtering.git
 cd PS_filtering
 ```
 
