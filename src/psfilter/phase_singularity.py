@@ -139,13 +139,12 @@ def ensure_phase_singularity_file(
     points_time_path.parent.mkdir(parents=True, exist_ok=True)
     cleaned_igb_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if overwrite and points_time_path.exists():
-        points_time_path.unlink()
+    if not dry_run:
+        if overwrite and points_time_path.exists():
+            points_time_path.unlink()
 
-    # Never allow an old clean.igb to be mistaken for a newly generated one.
-    if cleaned_igb_path.exists():
-        cleaned_igb_path.unlink()
-
+        if cleaned_igb_path.exists():
+            cleaned_igb_path.unlink()
     try:
         run_igbhead(
             igbhead_executable=igbhead_executable,
@@ -177,7 +176,11 @@ def ensure_phase_singularity_file(
             )
 
     finally:
-        if not keep_cleaned_igb and cleaned_igb_path.exists():
+        if (
+    not dry_run
+    and not keep_cleaned_igb
+    and cleaned_igb_path.exists()
+):
             cleaned_igb_path.unlink()
 
     return PhaseSingularityDetectionResult(
