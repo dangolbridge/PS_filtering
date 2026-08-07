@@ -172,7 +172,7 @@ already exist:
 ```bash
 psfilter all \
     --work-dir /path/to/simulation \
-    --mesh Reentry_surface_iac \
+    --mesh mesh_name \
     --dt 1.0 \
     --reference-index 7 \
     --skip-ps-detection
