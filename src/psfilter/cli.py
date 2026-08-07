@@ -769,17 +769,25 @@ def _run_rotor_stage(
 
 def _add_tcl_arguments(parser: argparse.ArgumentParser, *, include_paths: bool = True) -> None:
     if include_paths:
-        parser.add_argument("--input", type=Path, required=True, help="transmembrane_v.dat")
-        parser.add_argument("--output-dir", type=Path, default=Path("tcl_results"))
-    parser.add_argument("--dt", type=float, required=True, help="Time per signal sample.")
-    parser.add_argument("--reference-index", type=int, required=True)
+        parser.add_argument("--ascii-vm-input", dest="input",type=Path, required=True, help=("transmembrane_v.dat. " 
+                            "The calculated transmembrane voltage ascii file path for your simulation."))
+        parser.add_argument("--tcl-output-dir", dest="output_dir",type=Path, default=Path("tcl_results"), help=("Output directory for TCL calculations. "
+        "Default: ./tcl_results."
+    ),)
+    parser.add_argument("--dt", type=float, required=True, help=("Time per signal sample "
+                                                                 "Time per signal sample. (Equal to space_dt in CARP... still needs improvement.)"))
+    parser.add_argument("--reference-index", type=int, required=True, help=("The signal reference index for mean TCL report"))
     parser.add_argument("--derivative-threshold", type=float, default=5.0)
     parser.add_argument("--min-peak-distance", type=float, default=10.0)
-    parser.add_argument("--labels-file", type=Path, default=None)
+    parser.add_argument("--labels-file", type=Path, default=None, help=("The signal names file path. "
+                                                                        "This file path contain the name of the signals for TCL calculation"))
     parser.add_argument("--derivative-per-time", action="store_true")
-    parser.add_argument("--fraction-window", type=float, default=0.9)
-    parser.add_argument("--fraction-cluster", type=float, default=0.1)
-    parser.add_argument("--max-groups", type=int, default=20)
+    parser.add_argument("--fraction-window", type=float, default=0.9, help=("The structured window for signal sequences. "
+                                                                            "The TCL ratio used for making the window for signal sequencing."))
+    parser.add_argument("--fraction-cluster", type=float, default=0.1, help=("The variation in signal sequences. "
+                        "The maximum accepted TCL ratio in signals sequences to be called as the same sequence."))
+    parser.add_argument("--max-groups", type=int, default=20, help=("The max number of sequences. "
+                                                                    "The maximum number of sequences. After this number arrhythmia will be called AF."))
     parser.add_argument("--no-stop-on-max-groups", action="store_true")
     parser.add_argument("--skip-activation", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
@@ -824,12 +832,28 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version="psfilter 0.1.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    tcl_parser = subparsers.add_parser("tcl", help="Calculate TCL and activation patterns.")
+    tcl_parser = subparsers.add_parser("tcl", help="Calculate TCL and activation patterns.",
+                                       description=(
+                                        "Calculate tachycardia cycle length and activation patterns "
+                                        "from extracted transmembrane-voltage signals."), 
+                                       epilog=("If the transmembrane ascii file is missing you can use this part as a way to calculate it. "
+                                         "You either need a nodes number file (--node-indices) containing the element number in each line [first line is the number of nodes], "
+                                         "or the pts file of the nodes (--transformed-points) containg the X Y Z of each node[first line is the number of nodes]. "
+                                         "from this pts file a file is made (--query-points) that is used with meshtool to find the closest indices in a specific radius (--search-radius)."),
+                                         )
     _add_tcl_arguments(tcl_parser)
     _add_extraction_arguments(tcl_parser)
     tcl_parser.set_defaults(handler=_command_tcl)
 
-    detect_parser = subparsers.add_parser("ps-detect", help="Create a .pts_t file.")
+    detect_parser = subparsers.add_parser("ps-detect", help="Create a .pts_t file.",
+                                          description=(
+                                        "Calculate PSs using igbfilament "
+                                        "from transmembrane-voltage igb file and the mesh."), 
+                                       epilog=("If the pts_t file is missing you can make it using this mode. "
+                                         "You need installed igbfilament path (--igbfilament) and the mesh path. "
+                                         "You can change the voltage threshold (threshold) and the timestep (filament-dt) for calculation. "
+                                         "In the prcoess a clean igb file is used by igbhead -j and it's used for the calculation which would be deleted after the calculations."),
+                                         )
     detect_parser.add_argument("--vm-igb", type=Path, required=True)
     detect_parser.add_argument("--mesh", type=Path, required=True)
     detect_parser.add_argument("--output", type=Path, required=True)
@@ -846,13 +870,25 @@ def _build_parser() -> argparse.ArgumentParser:
     coords_parser = subparsers.add_parser(
         "ps-coords",
         help="Run coordinate-based PS filtering.",
+        description=(
+    "In this stage, stable rotors are identified. "
+    "For large meshes, geodesic distance can be computationally expensive. "
+    "Existing nonempty results are reused by default. "
+    "Use --overwrite only when you want to recalculate them."
+),
+        epilog=(
+            "We need to filter the wrongly calculated PSs, spatially and temporally. "
+            "For the stable PSs we suggest using higher hard cap of the maximum time of the stable rotor (--hard-cap-fraction). "
+            "Furthermore, minimum time of the segment (--min-segment-time) and the gap between the calculated ps (--gap-factor) can be increased too. "
+            "Also we suggest turn on the single segment long ones.(--allow-single-segment) "
+        )
     )
     coords_parser.add_argument("--mesh-points", type=Path, required=True)
     coords_parser.add_argument("--mesh-elements", type=Path, default=None)
     coords_parser.add_argument("--points-time", type=Path, required=True)
     coords_parser.add_argument("--tcl-summary", type=Path, required=True)
     coords_parser.add_argument("--output-dir", type=Path, required=True)
-    coords_parser.add_argument("--radius", type=float, default=2000.0)
+    coords_parser.add_argument("--stable-ps-radius", type=float, default=2000.0)
     coords_parser.add_argument("--history-steps", type=int, default=5)
     coords_parser.add_argument("--min-segment-time", type=float, default=120.0)
     coords_parser.add_argument("--gap-factor", type=float, default=3.0)
@@ -867,13 +903,27 @@ def _build_parser() -> argparse.ArgumentParser:
     rotor_parser = subparsers.add_parser(
         "rotor-track",
         help="Run globally assigned rotor tracking.",
+        description=(
+    "In this stage, rotor trajectories and drift are identified. "
+    "For large meshes, geodesic distance can be computationally expensive. "
+    "Existing nonempty results are reused by default. "
+    "Use --overwrite only when you want to recalculate them."
+),
+        epilog=(
+            "We need to filter the wrongly calculated PSs, spatially and temporally but follow the drifts. "
+            "For the drift calculation we suggest using lower hard cap of the maximum time of the stable rotor (--hard-cap-fraction). "
+            "However, minimum time of the segment (--min-segment-time) should be less. "
+            "To make track linking more permissive, increase --track-radius " 
+            "or --drift-window-time. "
+            "Also you can control spatial movement with --drift-radius-factor."
+        )
     )
     rotor_parser.add_argument("--mesh-points", type=Path, required=True)
     rotor_parser.add_argument("--mesh-elements", type=Path, default=None)
     rotor_parser.add_argument("--points-time", type=Path, required=True)
     rotor_parser.add_argument("--tcl-summary", type=Path, required=True)
     rotor_parser.add_argument("--output-dir", type=Path, required=True)
-    rotor_parser.add_argument("--radius", type=float, default=2000.0)
+    rotor_parser.add_argument("--track-radius", type=float, default=2000.0)
     rotor_parser.add_argument("--max-gap-steps", type=int, default=5)
     rotor_parser.add_argument("--min-segment-time", type=float, default=120.0)
     rotor_parser.add_argument("--gap-factor", type=float, default=3.0)
@@ -895,7 +945,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     all_parser = subparsers.add_parser(
         "all",
-        help="Run the complete analysis workflow.",
+        help="Run the complete analysis workflow. We don't suggest using this at first use.",
     )
     all_parser.add_argument("--work-dir", type=Path, default=Path("."))
     all_parser.add_argument(
@@ -904,12 +954,16 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Mesh basename, normally without .pts or .elem.",
     )
-    all_parser.add_argument("--input", type=Path, default=None)
+    all_parser.add_argument("--ascii-vm-input", dest="input", type=Path, help=("transmembrane_v.dat. " 
+                            "The calculated transmembrane voltage ascii file path for your simulation."))
     all_parser.add_argument("--vm-igb", type=Path, default=None)
     all_parser.add_argument("--mesh-points", type=Path, default=None)
     all_parser.add_argument("--mesh-elements", type=Path, default=None)
     all_parser.add_argument("--points-time", type=Path, default=None)
-    all_parser.add_argument("--tcl-output-dir", type=Path, default=None)
+    all_parser.add_argument("--tcl-output-dir", type=Path, default=None, help=(
+        "Output directory for TCL calculations. "
+        "Default: <work-dir>/tcl_results."
+    ),)
     all_parser.add_argument("--ps-output-dir", type=Path, default=None)
     all_parser.add_argument("--transformed-points", type=Path, default=None)
     all_parser.add_argument("--query-points", type=Path, default=None)
@@ -918,15 +972,20 @@ def _build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--igbextract", default=None)
     all_parser.add_argument("--search-radius", type=float, default=50.0)
 
-    all_parser.add_argument("--dt", type=float, required=True)
-    all_parser.add_argument("--reference-index", type=int, required=True)
+    all_parser.add_argument("--dt", type=float, required=True, help=("Time per signal sample. "
+                                                                 "Time per signal sample. (Equal to space_dt in CARP... still needs improvement.)"))
+    all_parser.add_argument("--reference-index", type=int, required=True, help=("The signal reference index for mean TCL report")
     all_parser.add_argument("--derivative-threshold", type=float, default=5.0)
     all_parser.add_argument("--min-peak-distance", type=float, default=10.0)
-    all_parser.add_argument("--labels-file", type=Path, default=None)
+    all_parser.add_argument("--labels-file", type=Path, default=None, help=("The signal names file path. "
+                            "This file path contain the name of the signals for TCL calculation"))
     all_parser.add_argument("--derivative-per-time", action="store_true")
-    all_parser.add_argument("--fraction-window", type=float, default=0.9)
-    all_parser.add_argument("--fraction-cluster", type=float, default=0.1)
-    all_parser.add_argument("--max-groups", type=int, default=20)
+    all_parser.add_argument("--fraction-window", type=float, default=0.9, help=("The structured window for signal sequences. "
+                                                                                "The TCL ratio used for making the window for signal sequencing."))
+    all_parser.add_argument("--fraction-cluster", type=float, default=0.1, help=("The variation in signal sequences. "
+                            "The maximum accepted TCL ratio in signals sequences to be called as the same sequence."))
+    all_parser.add_argument("--max-groups", type=int, default=20, help=("The max number of sequences. "
+                            "The maximum number of sequences. After this number arrhythmia will be called AF."))
     all_parser.add_argument("--no-stop-on-max-groups", action="store_true")
     all_parser.add_argument("--skip-activation", action="store_true")
 
@@ -938,7 +997,7 @@ def _build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--keep-cleaned-igb", action="store_true")
     all_parser.add_argument("--skip-ps-detection", action="store_true")
 
-    all_parser.add_argument("--ps-radius", type=float, default=2000.0)
+    all_parser.add_argument("--stable-ps-radius", type=float, default=2000.0)
     all_parser.add_argument("--history-steps", type=int, default=5)
     all_parser.add_argument("--ps-min-segment-time", type=float, default=120.0)
     all_parser.add_argument("--ps-gap-factor", type=float, default=3.0)
@@ -1090,7 +1149,7 @@ def _command_ps_coords(args: argparse.Namespace) -> int:
         distance_mode=args.distance_mode,
         reference_tcl=reference_tcl,
         output_dir=args.output_dir,
-        radius=args.radius,
+        radius=args.stable_ps_radius,
         history_steps=args.history_steps,
         min_segment_time=args.min_segment_time,
         gap_factor=args.gap_factor,
@@ -1119,7 +1178,7 @@ def _command_rotor_track(args: argparse.Namespace) -> int:
         distance_mode=args.distance_mode,
         reference_tcl=reference_tcl,
         output_dir=args.output_dir,
-        match_radius=args.radius,
+        match_radius=args.track_radius,
         max_gap_steps=args.max_gap_steps,
         min_segment_time=args.min_segment_time,
         gap_factor=args.gap_factor,
@@ -1266,7 +1325,7 @@ def _command_all(args: argparse.Namespace) -> int:
             distance_mode=args.ps_distance_mode,
             reference_tcl=reference_tcl,
             output_dir=ps_coords_output_dir,
-            radius=args.ps_radius,
+            radius=args.stable_ps_radius,
             history_steps=args.history_steps,
             min_segment_time=args.ps_min_segment_time,
             gap_factor=args.ps_gap_factor,
