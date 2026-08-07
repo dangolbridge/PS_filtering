@@ -178,7 +178,7 @@ psfilter all \
     --skip-ps-detection
 ```
 
-For a large mesh, skip the expensive geodesic `PS_coords` stage:
+For a large mesh, skip the expensive geodesic distance calculation in either 'PS-coords' or 'rotor-track' stages or both of them:
 
 ```bash
 psfilter all \
@@ -186,8 +186,8 @@ psfilter all \
     --mesh Reentry_surface_iac \
     --dt 1.0 \
     --reference-index 7 \
-    --skip-ps-detection \
-    --skip-ps-coords
+    --ps-distance-mode euclidean \
+    --track-distance-mode euclidean
 ```
 
 ### Default paths used by `all`
