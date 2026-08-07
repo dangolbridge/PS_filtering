@@ -1,107 +1,41 @@
 # PSFilter
 
 PSFilter is a Python package and command-line workflow for tachycardia cycle
-length analysis, activation-order analysis, phase-singularity detection,
-coordinate-based PS filtering, and moving rotor tracking on cardiac meshes.
+length (TCL) analysis, activation-pattern analysis, phase-singularity (PS)
+detection, coordinate-based PS filtering, and moving rotor tracking on cardiac
+meshes.
 
 The package is designed around openCARP-style files and external IGB utilities.
-It supports both individual analysis stages and a complete pipeline.
+It supports individual analysis stages as well as a complete `all` pipeline.
 
 ## Main capabilities
 
-- Calculate tachycardia cycle length (TCL) from extracted transmembrane-voltage signals.
+- Calculate TCL from extracted transmembrane-voltage signals.
 - Analyse cycle-by-cycle activation order and recurring activation sequences.
-- Run `igbhead` and `igbfilament` to generate phase-singularity `.pts_t` files.
-- Map phase-singularity coordinates to mesh vertices.
-- Filter coordinate-based PS detections using either:
+- Generate phase-singularity `.pts_t` files using `igbhead` and `igbfilament`.
+- Map PS coordinates to mesh vertices.
+- Filter stable PS locations using either:
   - Euclidean distance; or
   - bounded mesh-geodesic distance.
-- Build moving rotor tracks with:
+- Build moving rotor tracks using:
   - global one-to-one assignment;
   - Euclidean or mesh-geodesic matching;
-  - rolling drift splitting;
-  - segment-level filtering;
-  - occupancy and time-gap diagnostics.
-- Run all stages through one CLI while reusing loaded mesh coordinates, parsed
-  `.pts_t` data, and PS-to-vertex mapping.
-- Build and reuse a `MeshGeodesicGraph` only when at least one requested stage
-  uses geodesic distance.
-
-## Distance backends and performance
-
-Both `ps-coords` and `rotor-track` support two distance backends:
-
-```text
-geodesic
-euclidean
-```
-
-The default is `geodesic`.
-
-For the standalone commands, select the backend with:
-
-```bash
---distance-mode geodesic
-```
-
-or:
-
-```bash
---distance-mode euclidean
-```
-
-For the complete `all` pipeline, the two stages can be configured independently:
-
-```bash
---ps-distance-mode {geodesic,euclidean}
---track-distance-mode {geodesic,euclidean}
-```
-
-The geodesic `PS_coords` analysis can be substantially slower than geodesic
-rotor tracking. For every current PS vertex, `PS_coords` checks continuity
-against PS vertices from several recent timesteps. Depending on PS density,
-this can produce many bounded graph-distance queries, and the analysis is
-performed for individual TCL cycles as well as for the complete time range.
-
-Rotor tracking normally performs fewer geodesic queries because it compares
-only active tracks with PS points in the current timestep.
-
-For large meshes or dense `.pts_t` files, a practical mixed-backend workflow is:
-
-```bash
-psfilter all \
-    --work-dir /path/to/simulation \
-    --mesh Reentry_surface_iac \
-    --dt 1.0 \
-    --reference-index 7 \
-    --skip-ps-detection \
-    --ps-distance-mode euclidean \
-    --track-distance-mode geodesic
-```
-
-This keeps the faster Euclidean backend for coordinate-history filtering while
-retaining surface-aware geodesic matching for rotor tracking.
-
-When surface topology is not required for either analysis, both stages can use
-Euclidean distance:
-
-```bash
-psfilter all ... \
-    --ps-distance-mode euclidean \
-    --track-distance-mode euclidean
-```
-
-In that case, no geodesic graph is built.
+  - temporal-gap splitting;
+  - rolling-drift splitting;
+  - segment-duration filtering;
+  - occupancy, movement, and gap diagnostics.
+- Run all stages through one CLI.
+- Reuse mesh coordinates, mapped PS data, and one geodesic graph when possible.
 
 ## Requirements
 
 ### Python
 
-- Python 3.10 or newer
+- Python 3.10 or newer.
 
 ### Python dependencies
 
-Installed automatically through `pyproject.toml`:
+Installed through `pyproject.toml`:
 
 - NumPy
 - pandas
@@ -109,15 +43,15 @@ Installed automatically through `pyproject.toml`:
 
 ### External command-line programs
 
-Some stages require tools that are not installed through `pip`:
+Some stages require programs that are not installed by `pip`:
 
 - `meshtool`
 - `igbextract`
 - `igbhead`
 - `igbfilament`
 
-These programs must be installed separately and either available in `PATH` or
-provided explicitly through CLI arguments.
+These executables must either be available in `PATH` or be supplied explicitly
+through the corresponding CLI arguments.
 
 ## Repository layout
 
@@ -146,8 +80,8 @@ PS_filtering/
         └── tcl.py
 ```
 
-The CLI exposes both Euclidean and geodesic implementations. The backend is
-selected at run time rather than by changing modules manually.
+The CLI exposes both Euclidean and geodesic implementations. The distance
+backend is selected at run time.
 
 ## Installation
 
@@ -158,11 +92,11 @@ git clone https://github.com/dangolbridge/PS_filtering.git
 cd PS_filtering
 ```
 
-Create and activate a virtual environment:
+Create an environment with a modern Python version. For example, with Conda:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+conda create -n psfilter-env python=3.11 pip
+conda activate psfilter-env
 ```
 
 Install the package in editable mode:
@@ -184,13 +118,15 @@ The equivalent module command is:
 python -m psfilter --help
 ```
 
-A root-level compatibility launcher is also available:
+The root-level launcher can also be used:
 
 ```bash
 python run_psfilter.py --help
 ```
 
 ## CLI commands
+
+PSFilter exposes five subcommands:
 
 ```text
 psfilter tcl
@@ -200,50 +136,64 @@ psfilter rotor-track
 psfilter all
 ```
 
-Inspect a command before running it:
+Display detailed help for a specific command with:
 
 ```bash
+psfilter tcl --help
+psfilter ps-detect --help
+psfilter ps-coords --help
 psfilter rotor-track --help
+psfilter all --help
 ```
 
-## Quick start
+## Distance backends
 
-### Run a complete analysis with existing input files
-
-This example assumes that `transmembrane_v.dat` and the PS `.pts_t` file
-already exist:
-
-```bash
-psfilter all \
-    --work-dir /path/to/simulation \
-    --mesh Reentry_surface_iac \
-    --dt 1.0 \
-    --reference-index 7 \
-    --skip-ps-detection
-```
-
-Because the default distance backend is geodesic for both PS stages, this also
-uses:
+Both `ps-coords` and `rotor-track` support:
 
 ```text
-/path/to/simulation/Reentry_surface_iac.pts
-/path/to/simulation/Reentry_surface_iac.elem
+geodesic
+euclidean
 ```
 
-To use Euclidean distance for both PS stages:
+For standalone commands, select the backend with:
 
 ```bash
-psfilter all \
-    --work-dir /path/to/simulation \
-    --mesh Reentry_surface_iac \
-    --dt 1.0 \
-    --reference-index 7 \
-    --skip-ps-detection \
-    --ps-distance-mode euclidean \
-    --track-distance-mode euclidean
+--distance-mode {geodesic,euclidean}
 ```
 
-To use Euclidean `PS_coords` and geodesic rotor tracking:
+The default is `geodesic`.
+
+For the complete pipeline, the two PS stages are configured independently:
+
+```bash
+--ps-distance-mode {geodesic,euclidean}
+--track-distance-mode {geodesic,euclidean}
+```
+
+Both default to `geodesic`.
+
+### Geodesic mode
+
+Geodesic mode builds a graph from the `.elem` connectivity. Mesh-edge weights
+are the Euclidean lengths of connected mesh vertices, and bounded graph
+searches are used to estimate surface-aware distances.
+
+Use the `.elem` file corresponding to the surface on which the PS coordinates
+were generated. A volumetric mesh can allow paths through the atrial wall
+rather than along the intended surface.
+
+### Euclidean mode
+
+Euclidean mode uses direct straight-line distance between mapped mesh
+coordinates and does not construct a geodesic graph.
+
+### Performance note
+
+Geodesic `ps-coords` can be substantially slower than geodesic rotor tracking.
+`ps-coords` checks PS continuity against several previous timesteps, which can
+produce many local graph-distance searches.
+
+A practical mixed workflow for large meshes is:
 
 ```bash
 psfilter all \
@@ -256,85 +206,76 @@ psfilter all \
     --track-distance-mode geodesic
 ```
 
-### Default paths used by `all`
-
-For:
+If surface-aware distance is not needed in either stage:
 
 ```bash
 psfilter all \
     --work-dir /path/to/simulation \
     --mesh Reentry_surface_iac \
     --dt 1.0 \
-    --reference-index 7
+    --reference-index 7 \
+    --skip-ps-detection \
+    --ps-distance-mode euclidean \
+    --track-distance-mode euclidean
 ```
 
-the default input paths are:
+When both PS stages are Euclidean, no geodesic graph is built.
 
-```text
-/path/to/simulation/vm.igb
-/path/to/simulation/transmembrane_v.dat
-/path/to/simulation/Reentry_surface_iac.pts
-/path/to/simulation/Reentry_surface_iac.elem
-/path/to/simulation/tcl_results/
-/path/to/simulation/PS_results/Reentry_surface_iac.pts_t
-```
+---
 
-The default PS-analysis output directories are mode-specific:
+# 1. TCL and activation analysis
 
-```text
-/path/to/simulation/PS_results/ps_coords_geodesic/
-/path/to/simulation/PS_results/rotor_track_geodesic/
-```
+The `tcl` command calculates TCL and, unless disabled, activation-pattern
+outputs.
 
-If Euclidean modes are selected, the corresponding defaults become:
-
-```text
-/path/to/simulation/PS_results/ps_coords_euclidean/
-/path/to/simulation/PS_results/rotor_track_euclidean/
-```
-
-Custom directories can be selected with:
-
-```text
---ps-coords-output-dir
---rotor-output-dir
-```
-
-Relative paths passed to `all` are resolved relative to `--work-dir`.
-
-## TCL and activation analysis
-
-Run TCL and activation-pattern analysis from an existing signal file:
+## Basic usage
 
 ```bash
 psfilter tcl \
-    --input /path/to/transmembrane_v.dat \
-    --output-dir /path/to/tcl_results \
+    --ascii-vm-input /path/to/transmembrane_v.dat \
+    --tcl-output-dir /path/to/tcl_results \
     --dt 1.0 \
     --reference-index 7
 ```
 
-Useful options:
+### Required arguments
 
-```text
---derivative-threshold
---min-peak-distance
---labels-file
---derivative-per-time
---fraction-window
---fraction-cluster
---max-groups
---no-stop-on-max-groups
---skip-activation
-```
+| Argument | Meaning |
+|---|---|
+| `--ascii-vm-input` | Path to the ASCII transmembrane-voltage signal file. |
+| `--dt` | Time interval between consecutive signal samples. |
+| `--reference-index` | Signal index used as the reference for the mean TCL report. |
 
-Main outputs:
+`--ascii-vm-input` is required by the standalone `tcl` parser.
+
+### TCL and activation options
+
+| Argument | Default | Meaning |
+|---|---:|---|
+| `--tcl-output-dir` | `./tcl_results` | Output directory for TCL and activation results. |
+| `--derivative-threshold` | `5.0` | Derivative threshold used for peak detection. |
+| `--min-peak-distance` | `10.0` | Minimum accepted separation between detected peaks. |
+| `--labels-file` | none | Optional file containing signal labels. |
+| `--derivative-per-time` | off | Calculate the derivative per unit time rather than per sample. |
+| `--fraction-window` | `0.9` | TCL fraction used to define the activation-sequence window. |
+| `--fraction-cluster` | `0.1` | TCL fraction used when grouping similar activation sequences. |
+| `--max-groups` | `20` | Maximum number of activation-sequence groups used by the stopping logic. |
+| `--no-stop-on-max-groups` | off | Do not stop when `max-groups` is reached. |
+| `--skip-activation` | off | Calculate TCL only and skip activation-pattern analysis. |
+| `--overwrite` | off | Recalculate numerical outputs instead of reusing existing nonempty results. |
+
+## Main TCL outputs
 
 ```text
 tcl_peaks_AP.csv
 tcl_per_signal_AP.csv
 global_tcl_AP.txt
 tcl_summary.csv
+```
+
+When activation analysis is enabled:
+
+```text
 cycle_activations.csv
 cycle_summary.csv
 global_activation_order.csv
@@ -342,12 +283,37 @@ activation_sequences.csv
 sequence_counts.csv
 ```
 
-### Extract `transmembrane_v.dat` when it is missing
+## Extracting the ASCII signal file when it is missing
+
+If the requested `--ascii-vm-input` file does not already exist, PSFilter can
+call `meshtool` and `igbextract` to generate it.
+
+The current implementation checks for all of these extraction inputs:
+
+```text
+--vm-igb
+--transformed-points
+--mesh
+--query-points
+--node-indices
+--meshtool
+--igbextract
+```
+
+The extraction search radius is controlled by:
+
+```text
+--search-radius
+```
+
+with default `50.0`.
+
+Example:
 
 ```bash
 psfilter tcl \
-    --input /path/to/transmembrane_v.dat \
-    --output-dir /path/to/tcl_results \
+    --ascii-vm-input /path/to/transmembrane_v.dat \
+    --tcl-output-dir /path/to/tcl_results \
     --dt 1.0 \
     --reference-index 7 \
     --vm-igb /path/to/vm.igb \
@@ -356,23 +322,51 @@ psfilter tcl \
     --query-points /path/to/tcl_query_points.pts \
     --node-indices /path/to/node_indices.txt \
     --meshtool /path/to/meshtool \
-    --igbextract /path/to/igbextract
+    --igbextract /path/to/igbextract \
+    --search-radius 50
 ```
 
-## Phase-singularity detection
+An existing nonempty ASCII signal file is reused even when `--overwrite` is
+used for the numerical outputs.
 
-Create a `.pts_t` file from `vm.igb`:
+---
+
+# 2. Phase-singularity detection
+
+The `ps-detect` command creates a phase-singularity `.pts_t` file from
+`vm.igb`.
+
+## Basic usage
 
 ```bash
 psfilter ps-detect \
     --vm-igb /path/to/vm.igb \
     --mesh /path/to/Reentry_surface_iac \
-    --output /path/to/PS_results/Reentry_surface_iac.pts_t \
-    --threshold -50 \
-    --filament-dt 8
+    --output /path/to/PS_results/Reentry_surface_iac.pts_t
 ```
 
-Specify executable paths when they are not available in `PATH`:
+### Required arguments
+
+```text
+--vm-igb
+--mesh
+--output
+```
+
+### Detection options
+
+| Argument | Default | Meaning |
+|---|---:|---|
+| `--igbhead` | `igbhead` | `igbhead` executable or path. |
+| `--igbfilament` | `igbfilament` | `igbfilament` executable or path. |
+| `--cleaned-igb` | none | Optional path for the cleaned temporary IGB file. |
+| `--threshold` | `-50.0` | Voltage threshold used by the PS-detection workflow. |
+| `--filament-dt` | `8.0` | Timestep used for filament/PS extraction. |
+| `--overwrite` | off | Recalculate an existing PS output. |
+| `--keep-cleaned-igb` | off | Keep the cleaned IGB file after PS detection. |
+| `--dry-run` | off | Show the expected operation without performing the calculation. |
+
+Example with explicit executable paths:
 
 ```bash
 psfilter ps-detect \
@@ -380,23 +374,19 @@ psfilter ps-detect \
     --mesh /path/to/Reentry_surface_iac \
     --output /path/to/PS_results/Reentry_surface_iac.pts_t \
     --igbhead /path/to/igbhead \
-    --igbfilament /path/to/igbfilament
+    --igbfilament /path/to/igbfilament \
+    --threshold -50 \
+    --filament-dt 8
 ```
 
-Additional options:
+---
 
-```text
---cleaned-igb
---overwrite
---keep-cleaned-igb
---dry-run
-```
+# 3. Coordinate-based stable PS filtering
 
-## Coordinate-based PS filtering
+The `ps-coords` command identifies spatially and temporally persistent PS
+locations. It supports both Euclidean and geodesic distance.
 
-`ps-coords` supports both Euclidean and mesh-geodesic continuity.
-
-### Geodesic mode
+## Geodesic example
 
 ```bash
 psfilter ps-coords \
@@ -406,21 +396,14 @@ psfilter ps-coords \
     --tcl-summary /path/to/tcl_results/global_tcl_AP.txt \
     --output-dir /path/to/PS_results/ps_coords_geodesic \
     --distance-mode geodesic \
-    --radius 2000 \
+    --stable-ps-radius 2000 \
     --history-steps 5 \
     --min-segment-time 120 \
     --gap-factor 3 \
     --hard-cap-fraction 0.90
 ```
 
-In geodesic mode, the current PS vertex is counted when it is within the
-configured mesh-geodesic radius of a PS vertex from one of the previous
-`history_steps` timesteps.
-
-`--mesh-elements` is required for the graph calculation. If it is omitted, the
-CLI looks for an `.elem` file with the same basename as `--mesh-points`.
-
-### Euclidean mode
+## Euclidean example
 
 ```bash
 psfilter ps-coords \
@@ -429,17 +412,45 @@ psfilter ps-coords \
     --tcl-summary /path/to/tcl_results/global_tcl_AP.txt \
     --output-dir /path/to/PS_results/ps_coords_euclidean \
     --distance-mode euclidean \
-    --radius 2000 \
+    --stable-ps-radius 2000 \
     --history-steps 5 \
     --min-segment-time 120 \
     --gap-factor 3 \
     --hard-cap-fraction 0.90
 ```
 
-Euclidean mode uses straight-line coordinate distance and does not build a
-geodesic graph.
+### Required arguments
 
-Main outputs:
+```text
+--mesh-points
+--points-time
+--tcl-summary
+--output-dir
+```
+
+`--mesh-elements` is optional at the parser level. In geodesic mode, if it is
+not supplied, PSFilter looks for an `.elem` file with the same basename as
+`--mesh-points`.
+
+## `ps-coords` parameters
+
+| Argument | Default | Meaning |
+|---|---:|---|
+| `--stable-ps-radius` | `2000.0` | Maximum spatial distance used when testing PS continuity. |
+| `--history-steps` | `5` | Number of recent PS timesteps considered for continuity. |
+| `--min-segment-time` | `120.0` | Minimum duration required for an accepted continuous PS segment. |
+| `--gap-factor` | `3.0` | Temporal-gap tolerance expressed as a multiple of the estimated PS timestep. |
+| `--hard-cap-fraction` | `0.90` | Maximum allowed segment duration relative to the nominal simulation duration. |
+| `--allow-single-segment` | off | Allow a vertex represented by a single continuous segment. |
+| `--max-mapping-distance` | none | Optional maximum distance allowed when mapping PS coordinates to mesh vertices. |
+| `--distance-mode` | `geodesic` | Select `geodesic` or `euclidean` distance. |
+| `--geodesic-cache-size` | `200000` | Maximum number of finite geodesic pair distances retained in the cache. |
+| `--edge-chunk-size` | `500000` | Temporary edge-buffer size used during geodesic graph construction. |
+| `--overwrite` | off | Recalculate existing nonempty outputs. |
+
+`--geodesic-cache-size` and `--edge-chunk-size` affect only geodesic mode.
+
+## Main `ps-coords` outputs
 
 ```text
 rotor_counts_cycle_<N>.dat
@@ -451,44 +462,27 @@ ps_mapping_report.csv
 ps_coords_summary.csv
 ```
 
-The summary file records the selected backend in `distance_method`.
+The summary records the selected distance method.
 
-By default, the historical single-segment rejection behavior is retained.
-Allow a vertex represented by one continuous segment with:
+### Performance suggestions
 
-```bash
---allow-single-segment
-```
-
-### Runtime controls
-
-The most influential parameters are:
-
-```text
---distance-mode
---radius
---history-steps
---geodesic-cache-size
---edge-chunk-size
-```
-
-`--geodesic-cache-size` and `--edge-chunk-size` affect only geodesic mode.
-
-To reduce runtime:
+For large meshes:
 
 1. use `--distance-mode euclidean` when surface-aware distance is not required;
-2. reduce `--history-steps`;
-3. verify that `--radius` is not unnecessarily large;
-4. use the correct surface mesh rather than a volumetric mesh in geodesic mode;
-5. run rotor tracking instead when coordinate-history maps are not required;
-6. skip this stage in the complete pipeline with `--skip-ps-coords`.
+2. reduce `--history-steps` when scientifically appropriate;
+3. avoid unnecessarily large `--stable-ps-radius` values;
+4. use the correct surface `.elem` file for geodesic calculations;
+5. use `--skip-ps-coords` in the complete pipeline when this stage is not required.
 
-## Rotor tracking
+---
 
-`rotor-track` supports both Euclidean and mesh-geodesic matching while retaining
-the same global assignment, rolling-drift, gap, and segment-filtering logic.
+# 4. Moving rotor tracking
 
-### Geodesic mode
+The `rotor-track` command builds moving PS tracks using global one-to-one
+assignment and filters them using temporal-gap, rolling-drift, and
+segment-duration criteria.
+
+## Geodesic example
 
 ```bash
 psfilter rotor-track \
@@ -498,7 +492,7 @@ psfilter rotor-track \
     --tcl-summary /path/to/tcl_results/global_tcl_AP.txt \
     --output-dir /path/to/PS_results/rotor_track_geodesic \
     --distance-mode geodesic \
-    --radius 2000 \
+    --track-radius 2000 \
     --max-gap-steps 5 \
     --min-segment-time 120 \
     --gap-factor 3 \
@@ -507,7 +501,7 @@ psfilter rotor-track \
     --hard-cap-fraction 0.90
 ```
 
-### Euclidean mode
+## Euclidean example
 
 ```bash
 psfilter rotor-track \
@@ -516,7 +510,7 @@ psfilter rotor-track \
     --tcl-summary /path/to/tcl_results/global_tcl_AP.txt \
     --output-dir /path/to/PS_results/rotor_track_euclidean \
     --distance-mode euclidean \
-    --radius 2000 \
+    --track-radius 2000 \
     --max-gap-steps 5 \
     --min-segment-time 120 \
     --gap-factor 3 \
@@ -525,19 +519,91 @@ psfilter rotor-track \
     --hard-cap-fraction 0.90
 ```
 
-Euclidean mode does not require an `.elem` file and does not construct a
-geodesic graph.
+### Required arguments
 
-The tracker:
+```text
+--mesh-points
+--points-time
+--tcl-summary
+--output-dir
+```
 
-1. maps PS coordinates to mesh vertices;
-2. globally assigns current PS points to active tracks;
-3. evaluates candidate matching distance with the selected backend;
-4. splits tracks at temporal gaps;
-5. splits segments when rolling drift exceeds the configured limit;
-6. filters and counts valid segments only.
+As with `ps-coords`, `--mesh-elements` is needed by the analysis only for
+geodesic distance. If omitted, the matching `.elem` path is inferred from
+`--mesh-points`.
 
-Main outputs:
+## `rotor-track` parameters
+
+| Argument | Default | Meaning |
+|---|---:|---|
+| `--track-radius` | `2000.0` | Maximum distance allowed when matching a current PS detection to an active rotor track. |
+| `--max-gap-steps` | `5` | Maximum timestep-index separation for retaining a track as matchable. |
+| `--min-segment-time` | `120.0` | Minimum duration required for a final rotor segment to be valid. |
+| `--gap-factor` | `3.0` | Temporal-gap threshold used to split an already-built track into continuous segments. |
+| `--drift-window-time` | `120.0` | Rolling time window over which spatial drift is evaluated. |
+| `--drift-min-time` | alias | Alias for `--drift-window-time` in the standalone command. |
+| `--drift-radius-factor` | `2.0` | Maximum rolling displacement expressed as a multiple of `track-radius`. |
+| `--hard-cap-fraction` | `0.90` | Maximum segment duration relative to nominal simulation duration. |
+| `--count-every-hit` | off | Count every valid rotor hit instead of unique vertex membership per track in the compatibility count map. |
+| `--max-mapping-distance` | none | Optional maximum PS-to-mesh mapping distance. |
+| `--distance-mode` | `geodesic` | Select `geodesic` or `euclidean` matching. |
+| `--geodesic-cache-size` | `200000` | Maximum number of finite geodesic pair distances retained in the cache. |
+| `--edge-chunk-size` | `500000` | Temporary edge-buffer size used during geodesic graph construction. |
+| `--overwrite` | off | Recalculate existing nonempty outputs. |
+
+A negative `--hard-cap-fraction` disables the maximum segment-duration cap for
+the standalone rotor command.
+
+## `max-gap-steps` versus `gap-factor`
+
+These parameters both concern missing detections, but they are used at
+different stages.
+
+`--max-gap-steps` is used during **track construction**. It determines whether
+a new PS detection can still be matched to a previously active track. It is
+expressed in timestep-index units.
+
+`--gap-factor` is used later during **track segmentation**. The temporal gap
+threshold is:
+
+```text
+gap_tolerance_time = gap_factor × estimated_PS_timestep
+```
+
+If two consecutive detections inside an already-built track are separated by
+more than this time, the track is split into separate continuous segments.
+
+In short:
+
+```text
+max-gap-steps  -> track identity tolerance
+gap-factor     -> continuous-segment tolerance
+```
+
+## `drift-window-time` versus `min-segment-time`
+
+`--drift-window-time` controls how far backward in time the tracker looks when
+evaluating rotor movement.
+
+If the rolling displacement exceeds:
+
+```text
+drift-radius-factor × track-radius
+```
+
+the segment is split.
+
+`--min-segment-time` is applied after temporal-gap and rolling-drift splitting.
+A final segment shorter than this value is rejected as too short.
+
+In short:
+
+```text
+drift-window-time -> controls rolling-drift evaluation and splitting
+min-segment-time  -> controls final segment acceptance
+```
+
+## Main rotor-tracking outputs
 
 ```text
 rotor_track_counts_cycle_<N>.dat
@@ -554,23 +620,13 @@ rotor_track_mapping_report.csv
 rotor_tracking_run_summary.csv
 ```
 
-The run summary records the selected backend in `distance_method`.
+---
 
-Disable the maximum segment-duration filter:
+# 5. Complete pipeline
 
-```bash
---hard-cap-fraction -1
-```
+The `all` command runs the complete analysis workflow.
 
-Count every valid track visit in the compatibility count map:
-
-```bash
---count-every-hit
-```
-
-Separate hit-count and duration maps are written regardless of this option.
-
-## Complete pipeline
+A basic command is:
 
 ```bash
 psfilter all \
@@ -580,165 +636,298 @@ psfilter all \
     --reference-index 7
 ```
 
-Important stage controls:
+The individual commands are useful for checking and tuning each stage before
+using the complete pipeline.
+
+## Default paths
+
+For the example above, the path resolver uses:
 
 ```text
+/path/to/simulation/transmembrane_v.dat
+/path/to/simulation/vm.igb
+/path/to/simulation/Reentry_surface_iac.pts
+/path/to/simulation/Reentry_surface_iac.elem
+/path/to/simulation/tcl_results/
+/path/to/simulation/PS_results/
+/path/to/simulation/PS_results/Reentry_surface_iac.pts_t
+```
+
+Relative paths supplied to `all` are resolved relative to `--work-dir`.
+
+## Main `all` path arguments
+
+| Argument | Default |
+|---|---|
+| `--work-dir` | `.` |
+| `--mesh` | required |
+| `--ascii-vm-input` | `<work-dir>/transmembrane_v.dat` when omitted |
+| `--vm-igb` | `<work-dir>/vm.igb` when omitted |
+| `--mesh-points` | `<mesh>.pts` when omitted |
+| `--mesh-elements` | `<mesh>.elem` when omitted |
+| `--points-time` | `<ps-output-dir>/<mesh-name>.pts_t` when omitted |
+| `--tcl-output-dir` | `<work-dir>/tcl_results` |
+| `--ps-output-dir` | `<work-dir>/PS_results` |
+| `--ps-coords-output-dir` | mode-specific subdirectory under `PS_results` |
+| `--rotor-output-dir` | mode-specific subdirectory under `PS_results` |
+
+Default PS-analysis output directories are:
+
+```text
+PS_results/ps_coords_geodesic/
+PS_results/rotor_track_geodesic/
+```
+
+When Euclidean modes are selected:
+
+```text
+PS_results/ps_coords_euclidean/
+PS_results/rotor_track_euclidean/
+```
+
+## TCL options in `all`
+
+```text
+--dt
+--reference-index
+--derivative-threshold
+--min-peak-distance
+--labels-file
+--derivative-per-time
+--fraction-window
+--fraction-cluster
+--max-groups
+--no-stop-on-max-groups
 --skip-activation
+```
+
+`--dt` and `--reference-index` are required.
+
+Extraction-related options are:
+
+```text
+--transformed-points
+--query-points
+--node-indices
+--meshtool
+--igbextract
+--search-radius
+```
+
+## PS-detection options in `all`
+
+```text
+--igbhead
+--igbfilament
+--cleaned-igb
+--threshold
+--filament-dt
+--keep-cleaned-igb
 --skip-ps-detection
---skip-ps-coords
---skip-rotor-track
+```
+
+When `--skip-ps-detection` is used, an existing nonempty `.pts_t` file must
+already be present at the resolved `--points-time` path.
+
+## Stable-PS options in `all`
+
+| Argument | Default |
+|---|---:|
+| `--stable-ps-radius` | `2000.0` |
+| `--history-steps` | `5` |
+| `--ps-min-segment-time` | `120.0` |
+| `--ps-gap-factor` | `3.0` |
+| `--ps-hard-cap-fraction` | `0.90` |
+| `--allow-single-segment` | off |
+| `--skip-ps-coords` | off |
+| `--ps-distance-mode` | `geodesic` |
+| `--ps-coords-output-dir` | mode-specific default |
+
+## Rotor-tracking options in `all`
+
+| Argument | Default |
+|---|---:|
+| `--track-radius` | `2000.0` |
+| `--max-gap-steps` | `5` |
+| `--track-min-segment-time` | `120.0` |
+| `--track-gap-factor` | `3.0` |
+| `--drift-window-time` | `120.0` |
+| `--drift-radius-factor` | `2.0` |
+| `--track-hard-cap-fraction` | `0.90` |
+| `--count-every-hit` | off |
+| `--skip-rotor-track` | off |
+| `--track-distance-mode` | `geodesic` |
+| `--rotor-output-dir` | mode-specific default |
+
+Shared PS-analysis options are:
+
+```text
+--max-mapping-distance
+--geodesic-cache-size
+--edge-chunk-size
+```
+
+The whole pipeline can be forced to recalculate numerical outputs with:
+
+```bash
 --overwrite
 ```
 
-Distance-backend controls:
+## Output reuse
+
+If TCL outputs already exist and are nonempty, they are reused unless
+`--overwrite` is specified.
+
+If stable-PS or rotor-tracking principal outputs already exist and are
+nonempty, those stages are reused unless `--overwrite` is specified.
+
+An existing nonempty extracted `transmembrane_v.dat` is reused even when
+`--overwrite` is supplied.
+
+## Geodesic graph reuse in `all`
+
+The pipeline builds a geodesic graph only when at least one PS stage actually
+needs geodesic distance.
+
+For example:
+
+```text
+ps-coords   = euclidean
+rotor-track = geodesic
+```
+
+builds one graph for rotor tracking.
+
+If both stages are Euclidean, no graph is created.
+
+## Pipeline summary
+
+The `all` command writes:
+
+```text
+psfilter_pipeline_summary.csv
+```
+
+Stage names include the selected backend, for example:
+
+```text
+tcl
+ps-detect
+ps-coords-euclidean
+rotor-track-geodesic
+```
+
+---
+
+# Core parameter summary
+
+| CLI parameter | Default | Main role |
+|---|---:|---|
+| `--stable-ps-radius` | `2000` | Spatial PS-continuity radius in `ps-coords`. |
+| `--history-steps` | `5` | Previous timesteps used for stable-PS continuity. |
+| `--track-radius` | `2000` | Maximum PS-to-track matching distance. |
+| `--max-gap-steps` | `5` | Track-identity tolerance in timestep-index units. |
+| `--gap-factor` | `3` | Continuous-segment gap tolerance in standalone commands. |
+| `--min-segment-time` | `120` | Minimum valid-segment duration in standalone commands. |
+| `--drift-window-time` | `120` | Rolling time window used to evaluate rotor drift. |
+| `--drift-radius-factor` | `2` | Maximum rolling drift as a multiple of `track-radius`. |
+| `--hard-cap-fraction` | `0.90` | Maximum single-segment duration relative to nominal simulation duration. |
+| `--max-mapping-distance` | none | Optional PS-to-mesh mapping-distance limit. |
+| `--geodesic-cache-size` | `200000` | Maximum geodesic distance-cache size. |
+| `--edge-chunk-size` | `500000` | Edge chunk size during graph construction. |
+
+In `all`, stage-specific versions are used for several parameters:
+
+```text
+--ps-min-segment-time
+--ps-gap-factor
+--ps-hard-cap-fraction
+
+--track-min-segment-time
+--track-gap-factor
+--track-hard-cap-fraction
+```
+
+---
+
+# Troubleshooting
+
+## `psfilter: command not found`
+
+Activate the environment in which PSFilter was installed:
+
+```bash
+conda activate psfilter-env
+```
+
+Then verify:
+
+```bash
+which python
+python --version
+python -m pip show psfilter
+which psfilter
+```
+
+For an editable installation:
+
+```bash
+cd /path/to/PS_filtering
+python -m pip install -e .
+hash -r
+```
+
+The module form can also be tested:
+
+```bash
+python -m psfilter --help
+```
+
+## Help output does not show the latest arguments
+
+Check the imported CLI module:
+
+```bash
+python -c "import psfilter.cli; print(psfilter.cli.__file__)"
+```
+
+To run directly from the repository source:
+
+```bash
+cd /path/to/PS_filtering
+PYTHONPATH="$PWD/src" python -m psfilter rotor-track --help
+```
+
+The standalone PS commands should show:
+
+```text
+--distance-mode {geodesic,euclidean}
+```
+
+The complete pipeline should show:
 
 ```text
 --ps-distance-mode {geodesic,euclidean}
 --track-distance-mode {geodesic,euclidean}
 ```
 
-Both default to `geodesic`, and they can be selected independently.
+## Geodesic `ps-coords` is very slow
 
-Mode-specific output-directory controls:
+Check:
 
-```text
---ps-coords-output-dir
---rotor-output-dir
-```
-
-The `all` command reuses:
-
-- mesh coordinates;
-- parsed `.pts_t` data;
-- PS-to-vertex mapping.
-
-A single `MeshGeodesicGraph` is built and reused only when at least one PS
-analysis stage actually requires geodesic distance. If both stages use
-Euclidean distance, no graph is built.
-
-A stage summary is written to:
-
-```text
-psfilter_pipeline_summary.csv
-```
-
-The stage names include the selected backend, for example:
-
-```text
-ps-coords-euclidean
-rotor-track-geodesic
-```
-
-## Geodesic-distance implementation
-
-This section applies when `geodesic` is selected for `ps-coords` or
-`rotor-track`.
-
-The mesh graph is built from the edges in the openCARP `.elem` file. Edge
-weights are the Euclidean lengths of connected mesh vertices.
-
-Distances are evaluated with bounded, target-aware Dijkstra searches. The code
-does not build an all-pairs distance matrix.
-
-The resulting distance is an edge-based approximation of surface geodesic
-distance. Use the `.elem` file corresponding to the surface on which the PS
-coordinates were generated.
-
-Do not unintentionally use a volumetric tetrahedral mesh when the desired
-distance is along the atrial surface. A volumetric graph can permit paths
-through the wall rather than along the surface.
-
-The graph follows the topology encoded in the `.elem` file. Explicit
-inter-layer or interatrial connections are therefore available to the
-geodesic search.
-
-For `euclidean` mode, distances are calculated directly from mesh coordinates
-and no graph is constructed.
-
-## Core analysis parameters
-
-| Parameter | Default | Meaning |
-|---|---:|---|
-| `distance_mode` | `geodesic` | Distance backend for standalone `ps-coords` or `rotor-track` |
-| `ps_distance_mode` | `geodesic` | Distance backend for `ps-coords` inside `all` |
-| `track_distance_mode` | `geodesic` | Distance backend for rotor tracking inside `all` |
-| `radius` | 2000 | Continuation or track-matching radius in the selected distance backend |
-| `history_steps` | 5 | Previous timesteps used by `PS_coords` |
-| `max_gap_steps` | 5 | Timestep-index gap allowed for track continuation |
-| `min_segment_time` | 120 | Minimum accepted continuous-segment duration |
-| `gap_factor` | 3 | Time-gap threshold as a multiple of PS timestep |
-| `drift_window_time` | 120 | Rolling time window for drift evaluation |
-| `drift_radius_factor` | 2 | Maximum rolling drift as a multiple of radius |
-| `hard_cap_fraction` | 0.90 | Maximum segment duration relative to nominal simulation duration |
-| `geodesic_cache_size` | 200000 | Maximum cached finite pair distances in geodesic mode |
-| `edge_chunk_size` | 500000 | Temporary edge-buffer size during geodesic graph construction |
-
-The nominal simulation duration used by the segment-duration cap is:
-
-```text
-number of TCL cycles × reference mean TCL
-```
-
-## Output reuse and overwrite
-
-Existing nonempty principal output files are reused by default.
-
-Use:
-
-```bash
---overwrite
-```
-
-to recalculate numerical outputs.
-
-For safety and efficiency, an existing nonempty extracted
-`transmembrane_v.dat` is reused even when numerical outputs are overwritten.
-
-## Troubleshooting
-
-### `psfilter: command not found`
-
-Activate the virtual environment and reinstall:
-
-```bash
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-The module form should still work:
-
-```bash
-python -m psfilter --help
-```
-
-### A required external executable is missing
-
-Provide its full path:
-
-```bash
---igbhead /full/path/to/igbhead
---igbfilament /full/path/to/igbfilament
---meshtool /full/path/to/meshtool
---igbextract /full/path/to/igbextract
-```
-
-### Geodesic `PS_coords` appears to hang
-
-It may simply be performing a large number of bounded graph searches. Check:
-
-- mesh size and topology;
-- number of PS points per timestep;
+- mesh size;
+- PS density;
 - `--history-steps`;
-- geodesic radius;
+- `--stable-ps-radius`;
 - whether the correct surface `.elem` file is being used.
 
-For a faster coordinate-history analysis, use:
+A faster alternative is:
 
 ```bash
 psfilter ps-coords ... --distance-mode euclidean
 ```
 
-For the complete pipeline, a practical mixed-backend configuration is:
+or:
 
 ```bash
 psfilter all ... \
@@ -746,47 +935,14 @@ psfilter all ... \
     --track-distance-mode geodesic
 ```
 
-You can also skip coordinate-based filtering entirely:
+## Geodesic results cross an unexpected anatomical connection
 
-```bash
-psfilter all ... --skip-ps-coords
-```
+The graph follows the topology encoded in the `.elem` file. Every explicit
+edge or connection in that graph is available to the geodesic search.
 
-### Results are joined across anatomically separate surfaces
+Use the surface mesh whose topology matches the intended analysis.
 
-Confirm that the `.elem` file contains the intended topology. Geodesic
-tracking cannot cross disconnected mesh components, but it can cross every
-explicit edge or connection present in the graph.
-
-### Euclidean mode still asks for or builds an `.elem` graph
-
-Confirm that the intended mode is actually selected:
-
-```bash
-psfilter ps-coords --help
-psfilter rotor-track --help
-```
-
-The standalone commands should show:
-
-```text
---distance-mode {geodesic,euclidean}
-```
-
-For the complete pipeline, use:
-
-```text
---ps-distance-mode {geodesic,euclidean}
---track-distance-mode {geodesic,euclidean}
-```
-
-Also confirm that the active Python environment is loading the expected package:
-
-```bash
-python -c "import psfilter.cli; print(psfilter.cli.__file__)"
-```
-
-### Existing outputs are skipped unexpectedly
+## Existing outputs are unexpectedly reused
 
 Use:
 
@@ -794,12 +950,24 @@ Use:
 --overwrite
 ```
 
-Also confirm that the package version of `required_outputs_exist()` treats
-zero-byte files as incomplete.
+to force recalculation.
 
-## Development installation
+## `--skip-ps-detection` fails
 
-Install development tools:
+When this option is used, the resolved `.pts_t` file must already exist and be
+nonempty.
+
+Check `--points-time`, or the default:
+
+```text
+<ps-output-dir>/<mesh-name>.pts_t
+```
+
+---
+
+# Development
+
+Install development dependencies:
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -817,11 +985,31 @@ Run tests:
 pytest
 ```
 
-## Research-use notice
+After changing CLI argument names, check every command help page:
 
-This package is research software. Analysis parameters, mesh topology,
-external-tool versions, and signal preprocessing choices can materially affect
-the results. Record the complete CLI command and software versions used for
-each analysis.
+```bash
+python -m psfilter tcl --help
+python -m psfilter ps-detect --help
+python -m psfilter ps-coords --help
+python -m psfilter rotor-track --help
+python -m psfilter all --help
+```
 
-Before public release, add an appropriate license file and project citation.
+---
+
+# Research-use notice
+
+PSFilter is research software. Analysis parameters, PS sampling interval, mesh
+topology, external-tool versions, and signal preprocessing choices can
+materially affect the results.
+
+For reproducibility, record:
+
+- the complete CLI command;
+- PSFilter version or Git commit;
+- mesh files;
+- external-tool versions;
+- key distance, gap, drift, and duration parameters.
+
+Before a public software release, add an appropriate license and project
+citation.
