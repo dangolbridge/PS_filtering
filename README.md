@@ -92,6 +92,7 @@ Clone the repository:
 ```bash
 git clone https://github.com/dangolbridge/PS_filtering.git
 cd PS_filtering
+```
 
 Create an environment with a modern Python version:
 
