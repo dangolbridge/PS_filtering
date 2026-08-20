@@ -85,18 +85,19 @@ backend is selected at run time.
 
 ## Installation
 
+PSFilter requires Python 3.10 or newer.
+
 Clone the repository:
 
 ```bash
 git clone https://github.com/dangolbridge/PS_filtering.git
 cd PS_filtering
-```
 
-Create an environment with a modern Python version. For example, with Conda:
+Create an environment with a modern Python version:
 
 ```bash
-conda create -n psfilter-env python=3.11 pip
-conda activate psfilter-env
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 Install the package in editable mode:
@@ -856,9 +857,6 @@ In `all`, stage-specific versions are used for several parameters:
 
 Activate the environment in which PSFilter was installed:
 
-```bash
-conda activate psfilter-env
-```
 
 Then verify:
 
