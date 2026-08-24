@@ -24,7 +24,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from .activation import analyze_activation_patterns
+from .activation import analyze_activation_patterns, plot_cycle_activation_figures
 from .io import (
     read_mean_tcl,
     read_pts_file,
@@ -291,7 +291,11 @@ def _write_tcl_outputs(
         activation.activation_sequences,
     )
     write_dataframe(output_dir / "sequence_counts.csv", activation.sequence_counts)
-
+    plot_cycle_activation_figures(
+    activation,
+    output_dir= output_dir / "activation_cycle_figures",
+    time_mode="delay",
+)
 
 def _run_tcl_stage(
     *,
