@@ -25,6 +25,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from pathlib import Path
+import re
+
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
 if TYPE_CHECKING:
     from .tcl import TCLResult
 
@@ -37,6 +43,8 @@ __all__ = [
     "cluster_ordered_delays",
     "extract_cycle_activation_orders",
     "summarize_activation_sequences",
+    "plot_cycle_activation_figure",
+    "plot_cycle_activation_figures",
 ]
 
 
@@ -135,6 +143,259 @@ class ActivationResult:
     n_global_groups: int
     stopped_early: bool
 
+
+def _is_generic_label(label: str) -> bool:
+    """Return True when the label looks like a default/generated label."""
+    normalized = re.sub(r"\s+", "", str(label).upper())
+    return bool(re.fullmatch(r"SIG\d+", normalized))
+
+
+def _signal_family_from_label(
+    label: str,
+    signal_index: int,
+    use_label_groups: bool,
+) -> str:
+    """Return a grouping/family name for coloring.
+
+    If anatomical labels are available, signals with the same base name
+    share a color (e.g. CS1, CS2 -> CS; HRA1, HRA2 -> HRA).
+
+    If labels are generic or absent, every 4 signals share one color.
+    """
+    if not use_label_groups:
+        return f"Group{signal_index // 4 + 1}"
+
+    normalized = str(label).strip().upper()
+    normalized = re.sub(r"\s+", "", normalized)
+    normalized = re.sub(r"[\[\(].*?[\]\)]", "", normalized)
+    normalized = re.sub(r"[-_ ]?\d+$", "", normalized)
+
+    if not normalized:
+        return f"Group{signal_index // 4 + 1}"
+
+    return normalized
+
+
+def _build_signal_family_map(
+    cycle_activations: pd.DataFrame,
+) -> tuple[dict[int, str], dict[str, tuple[float, float, float, float]]]:
+    """Build signal->family and family->color maps."""
+    unique_signals = (
+        cycle_activations[["signal_index", "signal_label"]]
+        .drop_duplicates(subset=["signal_index"])
+        .sort_values("signal_index")
+        .reset_index(drop=True)
+    )
+
+    labels = unique_signals["signal_label"].astype(str).tolist()
+    use_label_groups = any(not _is_generic_label(label) for label in labels)
+
+    family_by_signal: dict[int, str] = {}
+    for row in unique_signals.itertuples(index=False):
+        signal_index = int(row.signal_index)
+        signal_label = str(row.signal_label)
+        family_by_signal[signal_index] = _signal_family_from_label(
+            label=signal_label,
+            signal_index=signal_index,
+            use_label_groups=use_label_groups,
+        )
+
+    ordered_families = []
+    seen = set()
+    for signal_index in unique_signals["signal_index"].astype(int):
+        family = family_by_signal[int(signal_index)]
+        if family not in seen:
+            seen.add(family)
+            ordered_families.append(family)
+
+    cmap = plt.get_cmap("tab20")
+    color_by_family = {
+        family: cmap(index % cmap.N)
+        for index, family in enumerate(ordered_families)
+    }
+
+    return family_by_signal, color_by_family
+
+
+def plot_cycle_activation_figure(
+    activation_result: ActivationResult,
+    cycle_index: int,
+    output_path: str | Path | None = None,
+    *,
+    time_mode: str = "delay",
+    dpi: int = 150,
+) -> Path | None:
+    """Plot the selected activations for one cycle.
+
+    Parameters
+    ----------
+    activation_result
+        Activation analysis result.
+    cycle_index
+        Zero-based cycle index.
+    output_path
+        Optional output path for the figure. If None, the figure is shown
+        but not saved.
+    time_mode
+        'delay' to plot delay from cycle start, or 'absolute' to plot
+        absolute activation time.
+    dpi
+        Figure resolution.
+    """
+    if time_mode not in {"delay", "absolute"}:
+        raise ValueError("time_mode must be 'delay' or 'absolute'.")
+
+    cycle_table = activation_result.cycle_activations[
+        activation_result.cycle_activations["cycle_index"] == cycle_index
+    ].copy()
+
+    if cycle_table.empty:
+        raise ValueError(f"No activation rows found for cycle_index={cycle_index}.")
+
+    cycle_table = cycle_table.sort_values(
+        by=["signal_index", "activation_time"],
+        kind="stable",
+    ).reset_index(drop=True)
+
+    family_by_signal, color_by_family = _build_signal_family_map(
+        activation_result.cycle_activations
+    )
+
+    unique_signals = (
+        cycle_table[["signal_index", "signal_label"]]
+        .drop_duplicates(subset=["signal_index"])
+        .sort_values("signal_index")
+        .reset_index(drop=True)
+    )
+
+    n_signals = len(unique_signals)
+    y_positions = {
+        int(row.signal_index): n_signals - 1 - i
+        for i, row in enumerate(unique_signals.itertuples(index=False))
+    }
+
+    if time_mode == "delay":
+        x_values = cycle_table["delay"].to_numpy(dtype=float)
+        x_ref = 0.0
+        x_end = float(
+            cycle_table["window_end_time"].iloc[0]
+            - cycle_table["cycle_start_time"].iloc[0]
+        )
+        xlabel = "Activation delay from cycle start"
+    else:
+        x_values = cycle_table["activation_time"].to_numpy(dtype=float)
+        x_ref = float(cycle_table["cycle_start_time"].iloc[0])
+        x_end = float(cycle_table["window_end_time"].iloc[0])
+        xlabel = "Activation time"
+
+    x_min = min(float(np.min(x_values)), x_ref)
+    x_max = max(float(np.max(x_values)), x_end)
+    pad = max(1e-9, 0.05 * (x_max - x_min))
+    x_min -= pad
+    x_max += pad
+
+    fig_height = max(4.0, 0.45 * n_signals + 1.8)
+    fig, ax = plt.subplots(figsize=(10, fig_height))
+
+    for row in unique_signals.itertuples(index=False):
+        signal_index = int(row.signal_index)
+        y = y_positions[signal_index]
+        ax.hlines(y, x_min, x_max, color="0.90", linewidth=1.0)
+
+    for row, x in zip(cycle_table.itertuples(index=False), x_values):
+        signal_index = int(row.signal_index)
+        y = y_positions[signal_index]
+        family = family_by_signal[signal_index]
+        color = color_by_family[family]
+
+        ax.vlines(x, y - 0.35, y + 0.35, color=color, linewidth=2.0)
+        ax.plot(x, y, marker="o", markersize=4, color=color)
+
+    ax.axvline(x_ref, color="black", linestyle="--", linewidth=1.2, label="Cycle start")
+    ax.axvline(x_end, color="gray", linestyle=":", linewidth=1.2, label="Window end")
+
+    yticks = []
+    yticklabels = []
+    for row in unique_signals.itertuples(index=False):
+        signal_index = int(row.signal_index)
+        yticks.append(y_positions[signal_index])
+        yticklabels.append(str(row.signal_label))
+
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(yticklabels)
+    ax.set_ylim(-1, n_signals)
+    ax.set_xlim(x_min, x_max)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Signal")
+    ax.set_title(
+        f"Cycle {int(cycle_table['cycle_number'].iloc[0])} activations"
+    )
+
+    legend_handles = [
+        Line2D([0], [0], color=color, lw=3, label=family)
+        for family, color in color_by_family.items()
+    ]
+    legend_handles.extend(
+        [
+            Line2D([0], [0], color="black", lw=1.2, linestyle="--", label="Cycle start"),
+            Line2D([0], [0], color="gray", lw=1.2, linestyle=":", label="Window end"),
+        ]
+    )
+    ax.legend(
+        handles=legend_handles,
+        loc="upper right",
+        frameon=True,
+        fontsize=8,
+        ncol=2,
+    )
+
+    fig.tight_layout()
+
+    saved_path: Path | None = None
+    if output_path is not None:
+        saved_path = Path(output_path)
+        saved_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(saved_path, dpi=dpi, bbox_inches="tight")
+
+    plt.close(fig)
+    return saved_path
+
+
+def plot_cycle_activation_figures(
+    activation_result: ActivationResult,
+    output_dir: str | Path,
+    *,
+    time_mode: str = "delay",
+    dpi: int = 150,
+) -> list[Path]:
+    """Save one activation figure for each analysed cycle."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    cycle_ids = (
+        activation_result.cycle_activations["cycle_index"]
+        .drop_duplicates()
+        .astype(int)
+        .sort_values()
+        .tolist()
+    )
+
+    saved_paths: list[Path] = []
+
+    for cycle_index in cycle_ids:
+        cycle_number = cycle_index + 1
+        output_path = output_dir / f"cycle_{cycle_number:03d}_activations.png"
+        saved = plot_cycle_activation_figure(
+            activation_result=activation_result,
+            cycle_index=cycle_index,
+            output_path=output_path,
+            time_mode=time_mode,
+            dpi=dpi,
+        )
+        if saved is not None:
+            saved_paths.append(saved)
+
+    return saved_paths
 
 def _validate_positive_finite(value: float, name: str) -> float:
     """Return ``value`` as a positive finite float."""
