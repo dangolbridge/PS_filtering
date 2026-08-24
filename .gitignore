@@ -25,3 +25,7 @@ tcl_results/
 .vscode/
 .idea/
 .DS_Store
+
+# Examples
+
+examples/
