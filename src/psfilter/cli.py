@@ -24,7 +24,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from .activation import analyze_activation_patterns
+from .activation import analyze_activation_patterns, plot_cycle_activation_figures
 from .io import (
     read_mean_tcl,
     read_pts_file,
@@ -307,7 +307,12 @@ def _write_tcl_outputs(
     )
     write_dataframe(output_dir / "sequence_counts.csv", activation.sequence_counts)
 
-
+    plot_cycle_activation_figures(
+    activation,
+    output_dir=output_dir / "activation_cycle_figures",
+    time_mode="delay",
+)
+    
 def _run_tcl_stage(
     *,
     input_path: Path,
@@ -974,7 +979,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     all_parser.add_argument("--dt", type=float, required=True, help=("Time per signal sample. "
                                                                  "Time per signal sample. (Equal to space_dt in CARP... still needs improvement.)"))
-    all_parser.add_argument("--reference-index", type=int, required=True, help=("The signal reference index for mean TCL report")
+    all_parser.add_argument("--reference-index", type=int, required=True, help=("The signal reference index for mean TCL report"))
     all_parser.add_argument("--derivative-threshold", type=float, default=5.0)
     all_parser.add_argument("--min-peak-distance", type=float, default=10.0)
     all_parser.add_argument("--labels-file", type=Path, default=None, help=("The signal names file path. "
