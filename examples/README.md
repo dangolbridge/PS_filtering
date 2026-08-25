@@ -219,7 +219,7 @@ signal-sequence analysis is part of the demonstrated workflow.
 ![Example TCL calculation](figures/02_tcl_results.png)
 -->
 
-[Example TCL calculation](https://github.com/dangolbridge/PS_filtering/blob/main/figures/cycle_001_activations.png)
+![Example TCL calculation](https://github.com/dangolbridge/PS_filtering/blob/main/figures/cycle_001_activations.png)
 
 ### Figure placeholder — signal sequences
 
