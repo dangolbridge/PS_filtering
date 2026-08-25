@@ -208,7 +208,7 @@ signal-sequence analysis is part of the demonstrated workflow.
 
 ### Figure placeholder — TCL calculation
 
-> **ADD FIGURE HERE**
+<!-- **ADD FIGURE HERE**
 >
 > Suggested file: `figures/02_tcl_results.png`
 >
@@ -219,9 +219,11 @@ signal-sequence analysis is part of the demonstrated workflow.
 ![Example TCL calculation](figures/02_tcl_results.png)
 -->
 
+[Example TCL calculation](../figures/cycle_001_activations.png)
+
 ### Figure placeholder — signal sequences
 
-> **ADD FIGURE HERE**
+<!-- **ADD FIGURE HERE**
 >
 > Suggested file: `figures/03_signal_sequences.png`
 >
