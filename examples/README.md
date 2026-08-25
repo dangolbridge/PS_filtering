@@ -206,7 +206,7 @@ psfilter tcl \
 For this complete example, do **not** use `--skip-activation`, because the
 signal-sequence analysis is part of the demonstrated workflow.
 
-### Figure placeholder — TCL calculation
+<!--### Figure placeholder — TCL calculation
 
 <!-- **ADD FIGURE HERE**
 >
@@ -219,7 +219,6 @@ signal-sequence analysis is part of the demonstrated workflow.
 ![Example TCL calculation](figures/02_tcl_results.png)
 -->
 
-![Example TCL calculation](https://github.com/dangolbridge/PS_filtering/blob/main/figures/cycle_001_activations.png)
 
 ### Figure placeholder — signal sequences
 
@@ -232,6 +231,7 @@ signal-sequence analysis is part of the demonstrated workflow.
 <!-- Replace with:
 ![Example activation-sequence analysis](figures/03_signal_sequences.png)
 -->
+![Example TCL calculation](https://github.com/dangolbridge/PS_filtering/blob/main/figures/cycle_001_activations.png)
 
 ---
 
@@ -309,7 +309,7 @@ psfilter ps-detect \
 
 ### Figure placeholder — raw PS detection
 
-> **ADD FIGURE HERE**
+<!-- **ADD FIGURE HERE**
 >
 > Suggested file: `figures/04_ps_detection.png`
 >
@@ -320,6 +320,9 @@ psfilter ps-detect \
 -->
 
 ---
+![Raw PS detection](https://github.com/dangolbridge/PS_filtering/blob/main/figures/igbfils1.png)
+
+![Raw PS detection](https://github.com/dangolbridge/PS_filtering/blob/main/figures/igbfils2.png)
 
 # Protocol 3 — Stable PS filtering
 
@@ -369,7 +372,7 @@ ps_coords_summary.csv
 
 ### Figure placeholder — stable PS, Euclidean
 
-> **ADD FIGURE HERE**
+<!-->> **ADD FIGURE HERE**
 >
 > Suggested file: `figures/05_stable_ps_euclidean.png`
 >
@@ -379,6 +382,9 @@ ps_coords_summary.csv
 <!-- Replace with:
 ![Stable PS filtering using Euclidean distance](figures/05_stable_ps_euclidean.png)
 -->
+
+![Stable PS filtering using Euclidean distance](https://github.com/dangolbridge/PS_filtering/blob/main/figures/eucl12.png)
+![Stable PS filtering using Euclidean distance](https://github.com/dangolbridge/PS_filtering/blob/main/figures/geodtotal.png)
 
 ---
 
@@ -411,7 +417,7 @@ from the `--mesh-points` basename.
 
 ### Figure placeholder — stable PS, geodesic
 
-> **ADD FIGURE HERE**
+<!-->> **ADD FIGURE HERE**
 >
 > Suggested file: `figures/06_stable_ps_geodesic.png`
 >
@@ -420,6 +426,9 @@ from the `--mesh-points` basename.
 <!-- Replace with:
 ![Stable PS filtering using geodesic distance](figures/06_stable_ps_geodesic.png)
 -->
+
+![Stable PS filtering using geodesic distance](https://github.com/dangolbridge/PS_filtering/blob/main/figures/geod12.png)
+![Stable PS filtering using geodesic distance](https://github.com/dangolbridge/PS_filtering/blob/main/figures/geodtotal.png)
 
 ---
 
@@ -542,7 +551,7 @@ rotor_tracking_run_summary.csv
 
 ### Figure placeholder — rotor tracking, Euclidean
 
-> **ADD FIGURE HERE**
+<!-->> **ADD FIGURE HERE**
 >
 > Suggested file: `figures/07_rotor_tracking_euclidean.png`
 >
@@ -552,6 +561,8 @@ rotor_tracking_run_summary.csv
 <!-- Replace with:
 ![Rotor tracking using Euclidean distance](figures/07_rotor_tracking_euclidean.png)
 -->
+
+![Rotor tracking using Euclidean distance](https://github.com/dangolbridge/PS_filtering/blob/main/figures/rotoreucl.png)
 
 ---
 
@@ -578,7 +589,7 @@ psfilter rotor-track \
 
 ### Figure placeholder — rotor tracking, geodesic
 
-> **ADD FIGURE HERE**
+<!-->> **ADD FIGURE HERE**
 >
 > Suggested file: `figures/08_rotor_tracking_geodesic.png`
 >
@@ -588,6 +599,7 @@ psfilter rotor-track \
 <!-- Replace with:
 ![Rotor tracking using geodesic distance](figures/08_rotor_tracking_geodesic.png)
 -->
+![Rotor tracking using geodesic distance](https://github.com/dangolbridge/PS_filtering/blob/main/figures/rotorgeod.png)
 
 ---
 
