@@ -53,7 +53,7 @@ Some stages require programs that are not installed by `pip`:
 These executables must either be available in `PATH` or be supplied explicitly
 through the corresponding CLI arguments.
 
-## Repository layout
+<!--## Repository layout
 
 ```text
 PS_filtering/
@@ -79,6 +79,7 @@ PS_filtering/
         ├── rotor_tracking_geodesic.py
         └── tcl.py
 ```
+-->
 
 The CLI exposes both Euclidean and geodesic implementations. The distance
 backend is selected at run time.
