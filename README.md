@@ -79,10 +79,11 @@ PS_filtering/
         ├── rotor_tracking_geodesic.py
         └── tcl.py
 ```
--->
+
 
 The CLI exposes both Euclidean and geodesic implementations. The distance
 backend is selected at run time.
+-->
 
 ## Installation
 
@@ -106,7 +107,7 @@ Install the package in editable mode:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install .
 ```
 
 Check the installation:
