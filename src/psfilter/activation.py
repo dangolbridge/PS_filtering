@@ -356,7 +356,9 @@ def plot_cycle_activation_figure(
         saved_path = Path(output_path)
         saved_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(saved_path, dpi=dpi, bbox_inches="tight")
-
+    else:
+        plt.show()
+    
     plt.close(fig)
     return saved_path
 
@@ -469,7 +471,17 @@ def _prepare_peaks_per_signal(
                 f"Peak indices for signal {signal_index} cannot be negative."
             )
 
-        prepared.append(np.unique(integer_peaks))
+        #prepared.append(np.unique(integer_peaks))
+        differences = np.diff(integer_peaks)
+
+        if np.any(differences <= 0):
+            raise ValueError(
+                f"Peak indices for signal {signal_index} must be "
+                "strictly increasing and unique."
+            )
+
+        prepared.append(integer_peaks)
+
 
     if not prepared:
         raise ValueError("At least one signal is required.")
@@ -663,19 +675,41 @@ def extract_cycle_activation_orders(
             "reference_mean_tcl",
         )
 
+    #labels = _resolve_signal_labels(len(peaks), signal_labels)
+    #window_length = fraction_window * reference_mean_tcl
+#
+    #activation_rows: list[dict[str, int | float | str]] = []
+    #summary_rows: list[dict[str, int | float | bool]] = []
+    #stopped_early = False
+#
+    #for cycle_index, reference_sample in enumerate(reference_peaks[:-1]):
+    #    cycle_number = cycle_index + 1
+    #    cycle_start_time = float(reference_sample * dt)
+    #    window_end_time = float(cycle_start_time + window_length)
+#
+    #    selected_rows: list[dict[str, int | float | str]] = []
+
     labels = _resolve_signal_labels(len(peaks), signal_labels)
     window_length = fraction_window * reference_mean_tcl
-
+    
     activation_rows: list[dict[str, int | float | str]] = []
     summary_rows: list[dict[str, int | float | bool]] = []
     stopped_early = False
-
-    for cycle_index, reference_sample in enumerate(reference_peaks):
+    
+    for cycle_index, (reference_sample, next_reference_sample) in enumerate(
+        zip(reference_peaks[:-1], reference_peaks[1:])
+    ):
         cycle_number = cycle_index + 1
         cycle_start_time = float(reference_sample * dt)
-        window_end_time = float(cycle_start_time + window_length)
-
+        next_cycle_start_time = float(next_reference_sample * dt)
+    
+        window_end_time = min(
+            cycle_start_time + window_length,
+            next_cycle_start_time,
+        )
+    
         selected_rows: list[dict[str, int | float | str]] = []
+
 
         for signal_index, signal_peaks in enumerate(peaks):
             if signal_peaks.size == 0:

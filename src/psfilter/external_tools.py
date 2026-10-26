@@ -11,6 +11,8 @@ def run_meshtool_idxlist(
     meshtool_executable: PathLike,
     mesh_path: PathLike,
     coordinate_file: PathLike,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """Use meshtool to map coordinates to mesh-node indices."""
     command = [
@@ -23,7 +25,7 @@ def run_meshtool_idxlist(
         coordinate_file,
     ]
 
-    execute_command(command)
+    execute_command(command, dry_run=dry_run)
 
 
 def run_igbextract(
@@ -31,10 +33,16 @@ def run_igbextract(
     input_igb: PathLike,
     node_indices: Sequence[int],
     output_path: PathLike,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """Extract selected node signals from an IGB file."""
     node_text = ",".join(str(index) for index in node_indices)
 
+    if not node_text:
+        raise ValueError(
+            "At least one node index is required for igbextract."
+        )
     command = [
         igbextract_executable,
         "-l",
@@ -44,7 +52,7 @@ def run_igbextract(
         input_igb,
     ]
 
-    execute_command(command)
+    execute_command(command, dry_run=dry_run)
 
 
 def run_igbhead(

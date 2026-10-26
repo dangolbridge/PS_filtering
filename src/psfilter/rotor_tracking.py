@@ -126,6 +126,7 @@ class RotorTrackingResult:
     """Complete per-cycle and full-range rotor-tracking output."""
 
     cycle_counts: dict[int, np.ndarray]
+    aggregated_cycle_counts: np.ndarray
     cycle_intervals: list[tuple[float, float]]
     all_tracks: list[RotorTrack]
     accepted_tracks: list[RotorTrack]
@@ -479,8 +480,12 @@ def _temporal_segment_index_ranges(
             f"Track {track.id} times are not sorted."
         )
 
+    differences = np.diff(times)
+    numerical_tolerance = (
+        1e-9 * max(1.0, abs(gap_tolerance_time))
+    )
     breaks = np.where(
-        np.diff(times) > gap_tolerance_time
+        differences > gap_tolerance_time + numerical_tolerance
     )[0]
     starts = np.concatenate(([0], breaks + 1))
     ends = np.concatenate((breaks, [times.size - 1]))
@@ -794,11 +799,11 @@ def filter_rotor_tracks(
     timestep_dt: float,
     nominal_simulation_duration: float,
     min_segment_time: float = 120.0,
-    gap_factor: float = 3.0,
+    gap_factor: float = 5.0,
     drift_window_time: float = 120.0,
     drift_radius_factor: float = 2.0,
     base_radius: float = 2000.0,
-    max_single_segment_fraction: float | None = 0.90,
+    max_single_segment_fraction: float | None = 1.0,
 ) -> RotorFilterResult:
     """Split, evaluate, and classify track segments.
 
@@ -848,10 +853,11 @@ def filter_rotor_tracks(
         if (
             not np.isfinite(max_single_segment_fraction)
             or max_single_segment_fraction <= 0
+            or max_single_segment_fraction > 1
         ):
             raise ValueError(
-                "max_single_segment_fraction must be positive and "
-                "finite or None."
+                "max_single_segment_fraction must be greater than 0 and "
+                "no greater than 1, or None."
             )
         maximum_allowed_segment_time = (
             max_single_segment_fraction
@@ -1236,10 +1242,10 @@ def analyze_rotor_tracking(
     *,
     max_gap_steps: int = 5,
     min_segment_time: float = 120.0,
-    gap_factor: float = 3.0,
+    gap_factor: float = 5.0,
     drift_window_time: float = 120.0,
     drift_radius_factor: float = 2.0,
-    max_single_segment_fraction: float | None = 0.90,
+    max_single_segment_fraction: float | None = 1.0,
     unique_per_track: bool = True,
 ) -> RotorTrackingResult:
     """Run cycle-by-cycle and full-range moving PS tracking."""
@@ -1321,6 +1327,16 @@ def analyze_rotor_tracking(
             unique_per_track=unique_per_track,
         )
 
+    # Raw sum of the independently tracked and filtered TCL-cycle maps.
+    # This is intentionally kept separate from the full-range tracking map,
+    # because rotor identities are reset at every cycle boundary here.
+    aggregated_cycle_counts = np.zeros(
+        mesh_coordinates.shape[0],
+        dtype=int,
+    )
+    for counts in cycle_counts.values():
+        aggregated_cycle_counts += counts
+
     all_tracks = build_rotor_tracks(
         timesteps,
         mesh_coordinates,
@@ -1369,6 +1385,7 @@ def analyze_rotor_tracking(
 
     return RotorTrackingResult(
         cycle_counts=cycle_counts,
+        aggregated_cycle_counts=aggregated_cycle_counts,
         cycle_intervals=cycle_intervals,
         all_tracks=all_tracks,
         accepted_tracks=full_filter.accepted_tracks,

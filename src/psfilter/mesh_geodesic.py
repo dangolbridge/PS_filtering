@@ -176,7 +176,13 @@ class MeshGeodesicGraph:
             )
         if not np.all(np.isfinite(coordinates)):
             raise ValueError("coordinates contain NaN or infinite values.")
+        weight_dtype = np.dtype(weight_dtype)
 
+        if not np.issubdtype(weight_dtype, np.floating):
+            raise ValueError(
+                "weight_dtype must be a floating-point dtype; "
+                f"received {weight_dtype}."
+            )
         n_vertices = int(coordinates.shape[0])
         elem_path = Path(elem_path)
         if not elem_path.is_file():

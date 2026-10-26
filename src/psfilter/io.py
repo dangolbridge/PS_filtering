@@ -322,6 +322,7 @@ def read_transmembrane_file(path: PathLike) -> np.ndarray:
 
     return data
 
+
 def write_tcl_query_points(
     mesh_points_path: PathLike,
     output_path: PathLike,
@@ -349,6 +350,7 @@ def write_tcl_query_points(
                 f"{x:.12g} {y:.12g} {z:.12g} "
                 f"{search_radius:.12g}\n"
             )
+
 
 def read_index_list(path: PathLike) -> np.ndarray:
     """
