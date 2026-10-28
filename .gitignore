@@ -28,4 +28,7 @@ tcl_results/
 
 # Examples
 test-github-env/
-# examples/tree.txt
+
+# examples/
+# tree files
+tree.txt
