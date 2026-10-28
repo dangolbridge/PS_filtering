@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from math import isfinite
 
 from .external_tools import run_igbfilament, run_igbhead
 from .preprocessing import mesh_input_exists
@@ -109,6 +110,16 @@ def ensure_phase_singularity_file(
     else:
         cleaned_igb_path = Path(cleaned_igb_path)
 
+    if cleaned_igb_path.resolve() == vm_igb_path.resolve():
+        raise ValueError(
+            "cleaned_igb_path must be different from vm_igb_path."
+        )
+    
+    if cleaned_igb_path.resolve() == points_time_path.resolve():
+        raise ValueError(
+            "cleaned_igb_path must be different from points_time_path."
+        )
+    
     output_prefix = _output_prefix_from_pts_t(points_time_path)
 
     if _is_nonempty_file(points_time_path) and not overwrite:
@@ -131,20 +142,37 @@ def ensure_phase_singularity_file(
     threshold = float(threshold)
     filament_dt = float(filament_dt)
 
-    if filament_dt <= 0:
+    if not isfinite(threshold):
         raise ValueError(
-            f"filament_dt must be positive; received {filament_dt}."
+            f"threshold must be finite; received {threshold!r}."
         )
 
-    points_time_path.parent.mkdir(parents=True, exist_ok=True)
-    cleaned_igb_path.parent.mkdir(parents=True, exist_ok=True)
+    if not isfinite(filament_dt) or filament_dt <= 0:
+        raise ValueError(
+            "filament_dt must be a positive finite number; "
+            f"received {filament_dt!r}."
+        )
 
-    if overwrite and points_time_path.exists():
-        points_time_path.unlink()
+    #points_time_path.parent.mkdir(parents=True, exist_ok=True)
+    #cleaned_igb_path.parent.mkdir(parents=True, exist_ok=True)
+#
+    #if overwrite and points_time_path.exists():
+    #    points_time_path.unlink()
+#
+    ## Never allow an old clean.igb to be mistaken for a newly generated one.
+    #if cleaned_igb_path.exists():
+    #    cleaned_igb_path.unlink()
 
-    # Never allow an old clean.igb to be mistaken for a newly generated one.
-    if cleaned_igb_path.exists():
-        cleaned_igb_path.unlink()
+    if not dry_run:
+        points_time_path.parent.mkdir(parents=True, exist_ok=True)
+        cleaned_igb_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if overwrite and points_time_path.exists():
+            points_time_path.unlink()
+
+        # Never allow an old cleaned IGB to be mistaken for a new one.
+        if cleaned_igb_path.exists():
+            cleaned_igb_path.unlink()
 
     try:
         run_igbhead(
@@ -177,7 +205,11 @@ def ensure_phase_singularity_file(
             )
 
     finally:
-        if not keep_cleaned_igb and cleaned_igb_path.exists():
+        if (
+            not dry_run
+            and not keep_cleaned_igb
+            and cleaned_igb_path.exists()
+        ):
             cleaned_igb_path.unlink()
 
     return PhaseSingularityDetectionResult(

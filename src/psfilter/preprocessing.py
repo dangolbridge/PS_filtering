@@ -1,4 +1,5 @@
 from pathlib import Path
+from math import isfinite
 
 from .external_tools import (
     run_igbextract,
@@ -40,6 +41,15 @@ def ensure_transmembrane_file(
     transformed_points_path = Path(transformed_points_path)
     mesh_path = Path(mesh_path)
     query_points_path = Path(query_points_path)
+    search_radius = float(search_radius)
+
+    search_radius = float(search_radius)
+
+    if not isfinite(search_radius) or search_radius <= 0:
+        raise ValueError(
+            f"search_radius must be a positive finite number; "
+            f"got {search_radius!r}."
+        )
     node_indices_path = Path(node_indices_path)
 
     # The requested output already exists.
@@ -60,14 +70,34 @@ def ensure_transmembrane_file(
         f"Mesh or mesh basename not found: {mesh_path}"
     )
 
-    if not node_indices_path.is_file():
+    # if not node_indices_path.is_file():
+    #     if not transformed_points_path.is_file():
+    #         raise FileNotFoundError(
+    #             "Points used for TCL extraction were not found: "
+    #             f"{transformed_points_path}"
+    #         )
+
+    #     if not query_points_path.is_file():
+    #         write_tcl_query_points(
+    #             mesh_points_path=transformed_points_path,
+    #             output_path=query_points_path,
+    #             search_radius=search_radius,
+    #         )
+
+    #     run_meshtool_idxlist(
+    #         meshtool_executable=meshtool_executable,
+    #         mesh_path=mesh_path,
+    #         coordinate_file=query_points_path,
+    #     )
+
+    if overwrite or not node_indices_path.is_file():
         if not transformed_points_path.is_file():
             raise FileNotFoundError(
                 "Points used for TCL extraction were not found: "
                 f"{transformed_points_path}"
             )
 
-        if not query_points_path.is_file():
+        if overwrite or not query_points_path.is_file():
             write_tcl_query_points(
                 mesh_points_path=transformed_points_path,
                 output_path=query_points_path,
@@ -102,9 +132,9 @@ def ensure_transmembrane_file(
         output_path=output_path,
     )
 
-    if not output_path.is_file():
+    if not output_path.is_file() or output_path.stat().st_size == 0:
         raise RuntimeError(
-            "igbextract completed, but the expected output "
+            "igbextract completed, but the expected non-empty output "
             f"was not created: {output_path}"
         )
 

@@ -129,6 +129,7 @@ class RotorTrackingResult:
     """Complete per-cycle and full-range rotor-tracking output."""
 
     cycle_counts: dict[int, np.ndarray]
+    aggregated_cycle_counts: np.ndarray
     cycle_intervals: list[tuple[float, float]]
     all_tracks: list[RotorTrack]
     accepted_tracks: list[RotorTrack]
@@ -222,6 +223,39 @@ def _prepare_timesteps(
         )
 
     return prepared
+
+
+def _validate_geodesic_graph(
+    mesh_coordinates: np.ndarray,
+    geodesic_graph: MeshGeodesicGraph,
+) -> None:
+    """Ensure that the graph and coordinates describe the same mesh."""
+    if not isinstance(geodesic_graph, MeshGeodesicGraph):
+        raise TypeError(
+            "geodesic_graph must be a MeshGeodesicGraph instance."
+        )
+
+    n_vertices = mesh_coordinates.shape[0]
+    if geodesic_graph.info.n_vertices != n_vertices:
+        raise ValueError(
+            "The geodesic graph and mesh coordinate array have different "
+            f"vertex counts: {geodesic_graph.info.n_vertices} versus "
+            f"{n_vertices}."
+        )
+
+    graph_coordinates = np.asarray(geodesic_graph.coordinates, dtype=float)
+    if (
+        graph_coordinates.shape != mesh_coordinates.shape
+        or not np.allclose(
+            graph_coordinates,
+            mesh_coordinates,
+            rtol=0.0,
+            atol=1e-10,
+        )
+    ):
+        raise ValueError(
+            "The geodesic graph was built from different mesh coordinates."
+        )
 
 
 def estimate_timestep_dt(
@@ -382,11 +416,7 @@ def build_rotor_tracks(
     match_radius = float(match_radius)
     max_gap_steps = int(max_gap_steps)
 
-    if geodesic_graph.info.n_vertices != mesh_coordinates.shape[0]:
-        raise ValueError(
-            "The geodesic graph and coordinate array have different "
-            "numbers of vertices."
-        )
+    _validate_geodesic_graph(mesh_coordinates, geodesic_graph)
 
     if not np.isfinite(match_radius) or match_radius <= 0:
         raise ValueError("match_radius must be positive and finite.")
@@ -491,8 +521,14 @@ def _temporal_segment_index_ranges(
             f"Track {track.id} times are not sorted."
         )
 
+    gap_differences = np.diff(times)
+    gap_atol = np.finfo(float).eps * max(
+        1.0,
+        float(np.max(np.abs(times))),
+        abs(float(gap_tolerance_time)),
+    ) * 16.0
     breaks = np.where(
-        np.diff(times) > gap_tolerance_time
+        gap_differences > gap_tolerance_time + gap_atol
     )[0]
     starts = np.concatenate(([0], breaks + 1))
     ends = np.concatenate((breaks, [times.size - 1]))
@@ -801,11 +837,11 @@ def filter_rotor_tracks(
     timestep_dt: float,
     nominal_simulation_duration: float,
     min_segment_time: float = 120.0,
-    gap_factor: float = 3.0,
+    gap_factor: float = 5.0,
     drift_window_time: float = 120.0,
     drift_radius_factor: float = 2.0,
     base_radius: float = 2000.0,
-    max_single_segment_fraction: float | None = 0.90,
+    max_single_segment_fraction: float | None = 1.0,
 ) -> RotorFilterResult:
     """Split, evaluate, and classify track segments.
 
@@ -855,10 +891,11 @@ def filter_rotor_tracks(
         if (
             not np.isfinite(max_single_segment_fraction)
             or max_single_segment_fraction <= 0
+            or max_single_segment_fraction > 1
         ):
             raise ValueError(
-                "max_single_segment_fraction must be positive and "
-                "finite or None."
+                "max_single_segment_fraction must be greater than 0 and "
+                "no greater than 1, or None."
             )
         maximum_allowed_segment_time = (
             max_single_segment_fraction
@@ -1248,10 +1285,10 @@ def analyze_rotor_tracking(
     *,
     max_gap_steps: int = 5,
     min_segment_time: float = 120.0,
-    gap_factor: float = 3.0,
+    gap_factor: float = 5.0,
     drift_window_time: float = 120.0,
     drift_radius_factor: float = 2.0,
-    max_single_segment_fraction: float | None = 0.90,
+    max_single_segment_fraction: float | None = 1.0,
     unique_per_track: bool = True,
 ) -> RotorTrackingResult:
     """Run cycle-by-cycle and full-range moving PS tracking."""
@@ -1262,11 +1299,7 @@ def analyze_rotor_tracking(
         mapped_timesteps,
         mesh_coordinates.shape[0],
     )
-    if geodesic_graph.info.n_vertices != mesh_coordinates.shape[0]:
-        raise ValueError(
-            "The geodesic graph and coordinate array have different "
-            "numbers of vertices."
-        )
+    _validate_geodesic_graph(mesh_coordinates, geodesic_graph)
 
     reference_tcl = float(reference_tcl)
 
@@ -1341,6 +1374,13 @@ def analyze_rotor_tracking(
             unique_per_track=unique_per_track,
         )
 
+    aggregated_cycle_counts = np.zeros(
+        mesh_coordinates.shape[0],
+        dtype=int,
+    )
+    for counts in cycle_counts.values():
+        aggregated_cycle_counts += counts
+
     all_tracks = build_rotor_tracks(
         timesteps,
         mesh_coordinates,
@@ -1391,6 +1431,7 @@ def analyze_rotor_tracking(
 
     return RotorTrackingResult(
         cycle_counts=cycle_counts,
+        aggregated_cycle_counts=aggregated_cycle_counts,
         cycle_intervals=cycle_intervals,
         all_tracks=all_tracks,
         accepted_tracks=full_filter.accepted_tracks,

@@ -79,6 +79,7 @@ ACTIVATION_OUTPUTS = [
 ]
 PS_COORD_OUTPUTS = [
     "rotor_counts_ptst.dat",
+    "rotor_counts_cycles_aggregated.dat",
     "rotor_counts_normalized_ptst.dat",
     "rotor_segments_filtered.csv",
     "rotor_lifetimes.csv",
@@ -86,6 +87,7 @@ PS_COORD_OUTPUTS = [
 ]
 ROTOR_TRACK_OUTPUTS = [
     "rotor_track_counts_ptst.dat",
+    "rotor_track_counts_cycles_aggregated.dat",
     "rotor_track_counts_normalized_ptst.dat",
     "rotor_tracks_counts_report.csv",
     "rotor_summary.csv",
@@ -508,6 +510,11 @@ def _write_ps_coordinate_outputs(
             counts,
             fmt="%d",
         )
+    write_array(
+        output_dir / "rotor_counts_cycles_aggregated.dat",
+        result.aggregated_cycle_counts,
+        fmt="%d",
+    )
     write_array(output_dir / "rotor_counts_ptst.dat", result.filtered_counts, fmt="%d")
     write_array(
         output_dir / "rotor_counts_normalized_ptst.dat",
@@ -633,6 +640,11 @@ def _write_rotor_outputs(
             counts,
             fmt="%d",
         )
+    write_array(
+        output_dir / "rotor_track_counts_cycles_aggregated.dat",
+        result.aggregated_cycle_counts,
+        fmt="%d",
+    )
     write_array(output_dir / "rotor_track_counts_ptst.dat", result.full_counts, fmt="%d")
     write_array(
         output_dir / "rotor_track_counts_normalized_ptst.dat",
@@ -834,7 +846,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="psfilter",
         description="TCL, phase-singularity, and rotor-tracking analysis.",
     )
-    parser.add_argument("--version", action="version", version="psfilter 0.1.0")
+    parser.add_argument("--version", action="version", version="psfilter 1.1.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     tcl_parser = subparsers.add_parser("tcl", help="Calculate TCL and activation patterns.",
@@ -876,7 +888,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "ps-coords",
         help="Run coordinate-based PS filtering.",
         description=(
-    "In this stage, stable rotors are identified. "
+    "In this stage, spatially stable/continuous PS activity is identified. "
     "For large meshes, geodesic distance can be computationally expensive. "
     "Existing nonempty results are reused by default. "
     "Use --overwrite only when you want to recalculate them."
@@ -894,9 +906,9 @@ def _build_parser() -> argparse.ArgumentParser:
     coords_parser.add_argument("--tcl-summary", type=Path, required=True)
     coords_parser.add_argument("--output-dir", type=Path, required=True)
     coords_parser.add_argument("--stable-ps-radius", type=float, default=2000.0)
-    coords_parser.add_argument("--history-steps", type=int, default=5)
+    coords_parser.add_argument("--history-steps", type=int, default=10)
     coords_parser.add_argument("--min-segment-time", type=float, default=120.0)
-    coords_parser.add_argument("--gap-factor", type=float, default=3.0)
+    coords_parser.add_argument("--gap-factor", type=float, default=10.0)
     coords_parser.add_argument("--hard-cap-fraction", type=float, default=0.90)
     coords_parser.add_argument("--allow-single-segment", action="store_true")
     coords_parser.add_argument("--overwrite", action="store_true")
@@ -931,7 +943,7 @@ def _build_parser() -> argparse.ArgumentParser:
     rotor_parser.add_argument("--track-radius", type=float, default=2000.0)
     rotor_parser.add_argument("--max-gap-steps", type=int, default=5)
     rotor_parser.add_argument("--min-segment-time", type=float, default=120.0)
-    rotor_parser.add_argument("--gap-factor", type=float, default=3.0)
+    rotor_parser.add_argument("--gap-factor", type=float, default=5.0)
     rotor_parser.add_argument(
         "--drift-window-time",
         "--drift-min-time",
@@ -940,7 +952,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=120.0,
     )
     rotor_parser.add_argument("--drift-radius-factor", type=float, default=2.0)
-    rotor_parser.add_argument("--hard-cap-fraction", type=float, default=0.90)
+    rotor_parser.add_argument("--hard-cap-fraction", type=float, default=1.0)
     rotor_parser.add_argument("--count-every-hit", action="store_true")
     rotor_parser.add_argument("--overwrite", action="store_true")
     _add_mapping_argument(rotor_parser)
@@ -1003,9 +1015,9 @@ def _build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--skip-ps-detection", action="store_true")
 
     all_parser.add_argument("--stable-ps-radius", type=float, default=2000.0)
-    all_parser.add_argument("--history-steps", type=int, default=5)
+    all_parser.add_argument("--history-steps", type=int, default=10)
     all_parser.add_argument("--ps-min-segment-time", type=float, default=120.0)
-    all_parser.add_argument("--ps-gap-factor", type=float, default=3.0)
+    all_parser.add_argument("--ps-gap-factor", type=float, default=10.0)
     all_parser.add_argument("--ps-hard-cap-fraction", type=float, default=0.90)
     all_parser.add_argument("--allow-single-segment", action="store_true")
     all_parser.add_argument("--skip-ps-coords", action="store_true")
@@ -1028,10 +1040,10 @@ def _build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--track-radius", type=float, default=2000.0)
     all_parser.add_argument("--max-gap-steps", type=int, default=5)
     all_parser.add_argument("--track-min-segment-time", type=float, default=120.0)
-    all_parser.add_argument("--track-gap-factor", type=float, default=3.0)
+    all_parser.add_argument("--track-gap-factor", type=float, default=5.0)
     all_parser.add_argument("--drift-window-time", type=float, default=120.0)
     all_parser.add_argument("--drift-radius-factor", type=float, default=2.0)
-    all_parser.add_argument("--track-hard-cap-fraction", type=float, default=0.90)
+    all_parser.add_argument("--track-hard-cap-fraction", type=float, default=1.0)
     all_parser.add_argument("--count-every-hit", action="store_true")
     all_parser.add_argument("--skip-rotor-track", action="store_true")
     all_parser.add_argument(

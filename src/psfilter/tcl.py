@@ -168,14 +168,18 @@ def _resolve_signal_labels(
 
 
 def _sample_mean_std(values: np.ndarray) -> tuple[float, float]:
-    """Return mean and sample standard deviation using the old script rules."""
+    """Return mean and sample standard deviation."""
     values = np.asarray(values, dtype=float)
 
     if values.size == 0:
         return float("nan"), float("nan")
 
     mean_value = float(np.mean(values))
-    std_value = float(np.std(values, ddof=1)) if values.size > 1 else 0.0
+
+    if values.size == 1:
+        return mean_value, float("nan")
+
+    std_value = float(np.std(values, ddof=1))
 
     return mean_value, std_value
 
@@ -220,15 +224,22 @@ def detect_activation_peaks(
         min_peak_distance,
         "min_peak_distance",
     )
-    derivative_threshold = float(derivative_threshold)
-
-    if not np.isfinite(derivative_threshold):
-        raise ValueError(
-            "derivative_threshold must be finite; "
-            f"got {derivative_threshold!r}."
-        )
-
-    distance_samples = max(1, int(round(min_peak_distance / dt)))
+    #derivative_threshold = float(derivative_threshold)
+#
+    #if not np.isfinite(derivative_threshold):
+    #    raise ValueError(
+    #        "derivative_threshold must be finite; "
+    #        f"got {derivative_threshold!r}."
+    #    )
+    derivative_threshold = _validate_positive_finite(
+    derivative_threshold,
+    "derivative_threshold",
+)
+    
+    distance_samples = max(
+    1,
+    int(np.ceil(min_peak_distance / dt)),
+    )
 
     if derivative_per_time:
         derivative = np.gradient(signal, dt)
@@ -285,6 +296,7 @@ def calculate_rr_intervals(
         Positive TCL intervals in the same time unit as ``dt``.
     """
     dt = _validate_positive_finite(dt, "dt")
+    
     peak_indices = np.asarray(peak_indices, dtype=int).reshape(-1)
 
     if peak_indices.size < 2:
@@ -293,10 +305,20 @@ def calculate_rr_intervals(
     if np.any(peak_indices < 0):
         raise ValueError("Peak indices cannot be negative.")
 
-    peak_indices = np.sort(peak_indices)
-    intervals = np.diff(peak_indices).astype(float) * dt
+    
+    #peak_indices = np.sort(peak_indices)
+    #intervals = np.diff(peak_indices).astype(float) * dt
+#
+    #return intervals[intervals > 0]
 
-    return intervals[intervals > 0]
+    differences = np.diff(peak_indices)
+
+    if np.any(differences <= 0):
+        raise ValueError(
+            "Activation indices must be strictly increasing and unique."
+        )
+
+    return differences.astype(float) * dt
 
 
 def _build_peaks_table(
@@ -359,10 +381,15 @@ def calculate_tcl_statistics(
         intervals = calculate_rr_intervals(peaks, dt)
         mean_tcl, std_tcl = _sample_mean_std(intervals)
 
+        # if intervals.size > 1:
+            # sem_tcl = float(std_tcl / np.sqrt(intervals.size))
+        # elif intervals.size == 1:
+            # sem_tcl = 0.0
+        # else:
+            # sem_tcl = float("nan")
+
         if intervals.size > 1:
             sem_tcl = float(std_tcl / np.sqrt(intervals.size))
-        elif intervals.size == 1:
-            sem_tcl = 0.0
         else:
             sem_tcl = float("nan")
 

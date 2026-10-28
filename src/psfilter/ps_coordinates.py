@@ -5,8 +5,8 @@ This module reproduces the intent of the ``PS_coords`` workflow:
 1. Divide mapped PS timesteps into TCL-length cycles.
 2. Count a PS point only when it is spatially connected to a point from a
    recent timestep.
-3. Build per-cycle and full-range vertex count maps.
-4. Filter vertex histories by duration and continuity criteria.
+3. Build per-cycle, aggregated-cycle, and full-range vertex count maps.
+4. Filter full-range vertex histories by duration and continuity criteria.
 
 """
 
@@ -39,6 +39,7 @@ class PSCoordinateResult:
     """Complete coordinate-based PS analysis output."""
 
     cycle_counts: dict[int, np.ndarray]
+    aggregated_cycle_counts: np.ndarray
     cycle_intervals: list[tuple[float, float]]
     total_counts: np.ndarray
     filtered_counts: np.ndarray
@@ -154,7 +155,7 @@ def count_continuing_ps_hits(
     timesteps: Sequence[MappedPSTimestep],
     mesh_coordinates: np.ndarray,
     radius: float,
-    history_steps: int = 5,
+    history_steps: int = 10,
 ) -> PSHitResult:
     """Count PS detections connected to detections in recent timesteps.
 
@@ -226,11 +227,20 @@ def _split_hit_times(
     times: np.ndarray,
     gap_tolerance: float,
 ) -> list[np.ndarray]:
-    """Split sorted hit times into continuous segments."""
+    """Split sorted hit times into continuous segments.
+
+    A tiny numerical tolerance prevents timestamp round-off from splitting
+    gaps that are effectively equal to ``gap_tolerance``.
+    """
     if times.size == 0:
         return []
 
-    breaks = np.where(np.diff(times) > gap_tolerance)[0]
+    differences = np.diff(times)
+    numerical_tolerance = 1e-9 * max(1.0, abs(gap_tolerance))
+    breaks = np.where(
+        differences > gap_tolerance + numerical_tolerance
+    )[0]
+
     starts = np.concatenate(([0], breaks + 1))
     ends = np.concatenate((breaks, [times.size - 1]))
 
@@ -243,7 +253,7 @@ def filter_vertex_ps_histories(
     simulation_duration: float,
     *,
     min_segment_time: float = 120.0,
-    gap_factor: float = 3.0,
+    gap_factor: float = 10.0,
     hard_cap_fraction: float = 0.90,
     reject_single_segment: bool = False,
 ) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame]:
@@ -414,15 +424,16 @@ def filter_vertex_ps_histories(
         pd.DataFrame(lifetime_rows),
     )
 
+
 def analyze_ps_coordinates(
     mapped_timesteps: Sequence[MappedPSTimestep],
     mesh_coordinates: np.ndarray,
     reference_tcl: float,
     radius: float,
     *,
-    history_steps: int = 5,
+    history_steps: int = 10,
     min_segment_time: float = 120.0,
-    gap_factor: float = 3.0,
+    gap_factor: float = 10.0,
     hard_cap_fraction: float = 0.90,
     reject_single_segment: bool = False,
 ) -> PSCoordinateResult:
@@ -474,6 +485,13 @@ def analyze_ps_coordinates(
         )
         cycle_counts[cycle_number] = cycle_hit_result.counts
 
+    aggregated_cycle_counts = np.zeros(
+        mesh_coordinates.shape[0],
+        dtype=int,
+    )
+    for counts in cycle_counts.values():
+        aggregated_cycle_counts += counts
+
     total_hit_result = count_continuing_ps_hits(
         timesteps=timesteps,
         mesh_coordinates=mesh_coordinates,
@@ -505,6 +523,7 @@ def analyze_ps_coordinates(
 
     return PSCoordinateResult(
         cycle_counts=cycle_counts,
+        aggregated_cycle_counts=aggregated_cycle_counts,
         cycle_intervals=cycle_intervals,
         total_counts=total_hit_result.counts,
         filtered_counts=filtered_counts,

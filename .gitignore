@@ -27,5 +27,8 @@ tcl_results/
 .DS_Store
 
 # Examples
+test-github-env/
 
 # examples/
+# tree files
+tree.txt
