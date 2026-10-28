@@ -235,7 +235,13 @@ def _validate_geodesic_graph(
             "geodesic_graph must be a MeshGeodesicGraph instance."
         )
 
-    _validate_geodesic_graph(mesh_coordinates, geodesic_graph)
+    n_vertices = mesh_coordinates.shape[0]
+    if geodesic_graph.info.n_vertices != n_vertices:
+        raise ValueError(
+            "The geodesic graph and mesh coordinate array have different "
+            f"vertex counts: {geodesic_graph.info.n_vertices} versus "
+            f"{n_vertices}."
+        )
 
     graph_coordinates = np.asarray(geodesic_graph.coordinates, dtype=float)
     if (
