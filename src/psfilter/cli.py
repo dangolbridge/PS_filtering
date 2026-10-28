@@ -846,7 +846,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="psfilter",
         description="TCL, phase-singularity, and rotor-tracking analysis.",
     )
-    parser.add_argument("--version", action="version", version="psfilter 0.1.0")
+    parser.add_argument("--version", action="version", version="psfilter 1.1.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     tcl_parser = subparsers.add_parser("tcl", help="Calculate TCL and activation patterns.",

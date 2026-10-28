@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psfilter"
-version = "0.1.0"
+version = "1.1.0"
 description = "TCL, activation, phase-singularity filtering, and geodesic rotor tracking for cardiac meshes"
 readme = "README.md"
 requires-python = ">=3.10"
